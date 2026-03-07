@@ -4,13 +4,13 @@ server:
 spring:
   ai:
     ollama:
-      base-url: http://192.168.1.109:11434
+      base-url: http://49.232.146.225:11434
 
 # Redis
 redis:
   sdk:
     config:
-      host: 192.168.1.109
+      host: 49.232.146.225
       port: 16379
       pool-size: 10
       min-idle-size: 5

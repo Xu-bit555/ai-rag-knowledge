@@ -1,5 +1,6 @@
 package cn.bugstack.xfg.dev.tech.trigger.http;
 
+
 import cn.bugstack.xfg.dev.tech.api.IAiService;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.ChatResponse;
@@ -26,6 +27,7 @@ public class OllamaController implements IAiService {
         return chatClient.call(new Prompt(message, OllamaOptions.create().withModel(model)));
     }
 
+    // Stream是流式应答，流式同过Flux返回
     /**
      * http://localhost:8090/api/v1/ollama/generate_stream?model=deepseek-r1:1.5b&message=hi
      */
