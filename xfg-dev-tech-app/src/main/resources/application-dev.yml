@@ -6,7 +6,7 @@ spring:
     driver-class-name: org.postgresql.Driver
     username: postgres
     password: postgres
-    url: jdbc:postgresql://192.168.1.109:15432/ai-rag-knowledge
+    url: jdbc:postgresql://49.232.146.225:15432/ai-rag-knowledge
     type: com.zaxxer.hikari.HikariDataSource
     # hikari连接池配置
     hikari:
@@ -28,7 +28,7 @@ spring:
       connection-test-query: SELECT 1
   ai:
     ollama:
-      base-url: http://192.168.1.109:11434
+      base-url: http://49.232.146.225:11434
       embedding:
         options:
           num-batch: 512
@@ -45,7 +45,7 @@ spring:
 redis:
   sdk:
     config:
-      host: 192.168.1.109
+      host: 49.232.146.225
       port: 16379
       pool-size: 10
       min-idle-size: 5
