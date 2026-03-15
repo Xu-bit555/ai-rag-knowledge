@@ -36,7 +36,7 @@ public class OllamaController implements IAiService {
      */
     @RequestMapping(value = "generate", method = RequestMethod.GET)
     @Override
-    public ChatResponse generate(@RequestParam String model, @RequestParam String message) {
+    public ChatResponse generate(@RequestParam("model") String model, @RequestParam("message") String message) {
         return chatClient.call(new Prompt(message, OllamaOptions.create().withModel(model)));
     }
 
@@ -45,13 +45,13 @@ public class OllamaController implements IAiService {
      */
     @RequestMapping(value = "generate_stream", method = RequestMethod.GET)
     @Override
-    public Flux<ChatResponse> generateStream(@RequestParam String model, @RequestParam String message) {
+    public Flux<ChatResponse> generateStream(@RequestParam("model") String model, @RequestParam("message") String message) {
         return chatClient.stream(new Prompt(message, OllamaOptions.create().withModel(model)));
     }
 
     @RequestMapping(value = "generate_stream_rag", method = RequestMethod.GET)
     @Override
-    public Flux<ChatResponse> generateStreamRag(@RequestParam String model, @RequestParam String ragTag, @RequestParam String message) {
+    public Flux<ChatResponse> generateStreamRag(@RequestParam("model") String model, @RequestParam("ragTag") String ragTag, @RequestParam("message") String message) {
         String SYSTEM_PROMPT = """
                 Use the information from the DOCUMENTS section to provide accurate answers but act as if you knew this information innately.
                 If unsure, simply state that you don't know.
