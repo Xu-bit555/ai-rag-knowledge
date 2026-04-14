@@ -1,0 +1,68 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: ai-rag-knowledge
+
+  ai:
+    # MiniMax 云端API (兼容OpenAI格式)
+    minimax:
+      base-url: https://api.minimax.chat
+      api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
+      model: MiniMax-M2.7
+
+    # OpenAI兼容配置 (指向MiniMax)
+    openai:
+      base-url: https://api.minimax.chat
+      api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
+      chat:
+        options:
+          model: MiniMax-M2.7
+
+    # Jina Rerank配置
+    jina:
+      api-key: jina_5a1019fb5ac3466fbce1954125dfd8f3YXADROBzobucbqsZHBbzF1cEQHZX
+      model: jina-reranker-v1-base-en
+
+    # RAG配置
+    rag:
+      embed: nomic-embed-text
+      max-cases: 10
+      splitter:
+        max-tokens: 1000
+        min-tokens: 50
+        min-chunk-length-to-embed: 5
+        merge-chunk-length: 200
+        keep-separator: true
+      stream:
+        stream-key: rag:ingest:stream
+        group: rag-ingest-group
+        consumer: rag-ingest-consumer
+
+    # 向量存储配置
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536
+
+  datasource:
+    url: jdbc:postgresql://49.232.146.225:15432/ai-rag-knowledge
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+
+  sql:
+    init:
+      mode: always
+
+logging:
+  level:
+    root: INFO
+    cn.bugstack.rag: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

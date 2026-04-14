@@ -11,7 +11,6 @@ let currentChatId = null;
 
 // 获取知识库列表
 document.addEventListener('DOMContentLoaded', function() {
-    // 获取知识库列表
     const loadRagOptions = () => {
         const ragSelect = document.getElementById('ragSelect');
 
@@ -25,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     // 添加新选项
-                    data.data.forEach(tag => {
+                    data.data.tags && data.data.tags.forEach(tag => {
                         const option = new Option(`Rag：${tag}`, tag);
                         ragSelect.add(option);
                     });
@@ -36,7 +35,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     };
 
-    // 初始化加载
     loadRagOptions();
 });
 
@@ -44,7 +42,6 @@ function createNewChat() {
     const chatId = Date.now().toString();
     currentChatId = chatId;
     localStorage.setItem('currentChatId', chatId);
-    // 修改数据结构为包含name和messages的对象
     localStorage.setItem(`chat_${chatId}`, JSON.stringify({
         name: '新聊天',
         messages: []
@@ -55,11 +52,11 @@ function createNewChat() {
 
 function deleteChat(chatId) {
     if (confirm('确定要删除这个聊天记录吗？')) {
-        localStorage.removeItem(`chat_${chatId}`); // Remove the chat from localStorage
-        if (currentChatId === chatId) { // If the current chat is being deleted
-            createNewChat(); // Create a new chat
+        localStorage.removeItem(`chat_${chatId}`);
+        if (currentChatId === chatId) {
+            createNewChat();
         }
-        updateChatList(); // Update the chat list to reflect changes
+        updateChatList();
     }
 }
 
@@ -69,7 +66,7 @@ function updateChatList() {
       .filter(key => key.startsWith('chat_'));
 
     const currentChatIndex = chats.findIndex(key => key.split('_')[1] === currentChatId);
-    if (currentChatIndex!== -1) {
+    if (currentChatIndex !== -1) {
         const currentChat = chats[currentChatIndex];
         chats.splice(currentChatIndex, 1);
         chats.unshift(currentChat);
@@ -79,7 +76,6 @@ function updateChatList() {
         let chatData = JSON.parse(localStorage.getItem(chatKey));
         const chatId = chatKey.split('_')[1];
 
-        // 数据迁移：将旧数组格式转换为新对象格式
         if (Array.isArray(chatData)) {
             chatData = {
                 name: `聊天 ${new Date(parseInt(chatId)).toLocaleDateString()}`,
@@ -89,7 +85,7 @@ function updateChatList() {
         }
 
         const li = document.createElement('li');
-        li.className = `chat-item flex items-center justify-between p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors ${chatId === currentChatId? 'bg-blue-50' : ''}`;
+        li.className = `chat-item flex items-center justify-between p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors ${chatId === currentChatId ? 'bg-blue-50' : ''}`;
         li.innerHTML = `
             <div class="flex-1">
                 <div class="text-sm font-medium">${chatData.name}</div>
@@ -116,7 +112,6 @@ function updateChatList() {
 }
 
 let currentContextMenu = null;
-// 优化后的上下文菜单
 function showChatContextMenu(event, chatId) {
     event.stopPropagation();
     closeContextMenu();
@@ -146,7 +141,6 @@ function showChatContextMenu(event, chatId) {
     document.body.appendChild(menu);
     currentContextMenu = menu;
 
-    // 点击外部关闭菜单
     setTimeout(() => {
         document.addEventListener('click', closeContextMenu, { once: true });
     });
@@ -176,11 +170,11 @@ function loadChat(chatId) {
     currentChatId = chatId;
     localStorage.setItem('currentChatId', chatId);
     clearChatArea();
-    const chatData = JSON.parse(localStorage.getItem(`chat_${chatId}`) || { messages: [] });
+    const chatData = JSON.parse(localStorage.getItem(`chat_${chatId}`) || '{"messages": []}');
     chatData.messages.forEach(msg => {
         appendMessage(msg.content, msg.isAssistant, false);
     });
-    updateChatList()
+    updateChatList();
 }
 
 function clearChatArea() {
@@ -196,7 +190,6 @@ function appendMessage(content, isAssistant = false, saveToStorage = true) {
     const renderedContent = DOMPurify.sanitize(marked.parse(content));
     messageDiv.innerHTML = renderedContent;
 
-    // 添加复制按钮
     const copyBtn = document.createElement('button');
     copyBtn.className = 'absolute top-2 right-2 p-1 bg-gray-200 rounded-md text-xs';
     copyBtn.textContent = '复制';
@@ -211,35 +204,24 @@ function appendMessage(content, isAssistant = false, saveToStorage = true) {
     chatArea.appendChild(messageDiv);
     chatArea.scrollTop = chatArea.scrollHeight;
 
-    // 仅在需要时保存到本地存储
     if (saveToStorage && currentChatId) {
-        // 确保读取和保存完整的数据结构
         const chatData = JSON.parse(localStorage.getItem(`chat_${currentChatId}`) || '{"name": "新聊天", "messages": []}');
         chatData.messages.push({ content, isAssistant });
         localStorage.setItem(`chat_${currentChatId}`, JSON.stringify(chatData));
     }
 }
 
- function startEventStream(message) {
+function startEventStream(message) {
     if (currentEventSource) {
         currentEventSource.close();
     }
 
-    // 选项值，
-    // 组装01；http://localhost:8090/api/v1/ollama/generate_stream?message=Hello&model=deepseek-r1:1.5b
-    // 组装02；http://localhost:8090/api/v1/openai/generate_stream?message=Hello&model=gpt-4o
     const ragTag = document.getElementById('ragSelect').value;
     const aiModelSelect = document.getElementById('aiModel');
-    const aiModelValue = aiModelSelect.value; // 获取选中的 aiModel 的 value
-    const aiModelModel = aiModelSelect.options[aiModelSelect.selectedIndex].getAttribute('model'); // 获取选中的 aiModel 的 model 属性
+    const aiModelModel = aiModelSelect.options[aiModelSelect.selectedIndex].getAttribute('model');
 
-    let url;
-
-    if (ragTag) {
-        url = `http://localhost:8090/api/v1/${aiModelValue}/generate_stream_rag?message=${encodeURIComponent(message)}&ragTag=${encodeURIComponent(ragTag)}&model=${encodeURIComponent(aiModelModel)}`;
-    } else {
-        url = `http://localhost:8090/api/v1/${aiModelValue}/generate_stream?message=${encodeURIComponent(message)}&model=${encodeURIComponent(aiModelModel)}`;
-    }
+    // 修改为调用后端的 generate_cases_stream 接口
+    let url = `http://localhost:8090/api/v1/rag/generate_cases_stream?content=${encodeURIComponent(message)}&ragTag=${encodeURIComponent(ragTag || 'default')}`;
 
     currentEventSource = new EventSource(url);
     let accumulatedContent = '';
@@ -247,13 +229,27 @@ function appendMessage(content, isAssistant = false, saveToStorage = true) {
 
     currentEventSource.onmessage = function(event) {
         try {
-            const data = JSON.parse(event.data);
+            // 解析 SSE 格式: "event:xxx\ndata:yyy\n\n"
+            const text = event.data;
+            let eventType = 'message';
+            let dataContent = text;
 
-            if (data.result?.output?.content) {
-                const newContent = data.result.output.content;
-                accumulatedContent += newContent;
+            // 解析 event: 类型
+            const eventMatch = text.match(/^event:(\w+)/);
+            if (eventMatch) {
+                eventType = eventMatch[1];
+            }
 
-                // 首次创建临时消息容器
+            // 解析 data: 内容
+            const dataMatch = text.match(/data:(.+)/);
+            if (dataMatch) {
+                dataContent = dataMatch[1].trim();
+            }
+
+            if (eventType === 'cases' || eventType === 'rerank') {
+                // 后端返回的是普通文本，不是JSON
+                accumulatedContent += dataContent;
+
                 if (!tempMessageDiv) {
                     tempMessageDiv = document.createElement('div');
                     tempMessageDiv.className = 'max-w-4xl mx-auto mb-4 p-4 rounded-lg bg-gray-100 markdown-body relative';
@@ -261,37 +257,35 @@ function appendMessage(content, isAssistant = false, saveToStorage = true) {
                     welcomeMessage.style.display = 'none';
                 }
 
-                // 直接更新文本内容（先不解析Markdown）
                 tempMessageDiv.textContent = accumulatedContent;
                 chatArea.scrollTop = chatArea.scrollHeight;
-            }
-
-            if (data.result?.output?.properties?.finishReason === 'STOP') {
+            } else if (eventType === 'done') {
+                // 流式传输完成，进行最终渲染
                 currentEventSource.close();
 
-                // 流式传输完成后进行最终渲染
-                const finalContent = accumulatedContent;
-                tempMessageDiv.innerHTML = DOMPurify.sanitize(marked.parse(finalContent));
+                if (tempMessageDiv) {
+                    tempMessageDiv.innerHTML = DOMPurify.sanitize(marked.parse(accumulatedContent));
 
-                // 添加复制按钮
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'absolute top-2 right-2 p-1 bg-gray-200 rounded-md text-xs';
-                copyBtn.textContent = '复制';
-                copyBtn.onclick = () => {
-                    navigator.clipboard.writeText(finalContent).then(() => {
-                        copyBtn.textContent = '已复制';
-                        setTimeout(() => copyBtn.textContent = '复制', 2000);
-                    });
-                };
-                tempMessageDiv.appendChild(copyBtn);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'absolute top-2 right-2 p-1 bg-gray-200 rounded-md text-xs';
+                    copyBtn.textContent = '复制';
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(accumulatedContent).then(() => {
+                            copyBtn.textContent = '已复制';
+                            setTimeout(() => copyBtn.textContent = '复制', 2000);
+                        });
+                    };
+                    tempMessageDiv.appendChild(copyBtn);
 
-                // 保存到本地存储
-                if (currentChatId) {
-                    // 正确的数据结构应该是对象包含messages数组
-                    const chatData = JSON.parse(localStorage.getItem(`chat_${currentChatId}`) || '{"name": "新聊天", "messages": []}');
-                    chatData.messages.push({ content: finalContent, isAssistant: true });
-                    localStorage.setItem(`chat_${currentChatId}`, JSON.stringify(chatData));
+                    if (currentChatId) {
+                        const chatData = JSON.parse(localStorage.getItem(`chat_${currentChatId}`) || '{"name": "新聊天", "messages": []}');
+                        chatData.messages.push({ content: accumulatedContent, isAssistant: true });
+                        localStorage.setItem(`chat_${currentChatId}`, JSON.stringify(chatData));
+                    }
                 }
+            } else if (eventType === 'error') {
+                currentEventSource.close();
+                appendMessage('错误: ' + dataContent, true);
             }
         } catch (e) {
             console.error('Error parsing event data:', e);
@@ -301,6 +295,10 @@ function appendMessage(content, isAssistant = false, saveToStorage = true) {
     currentEventSource.onerror = function(error) {
         console.error('EventSource error:', error);
         currentEventSource.close();
+        if (tempMessageDiv && accumulatedContent) {
+            // 即使出错也显示已接收到的内容
+            tempMessageDiv.innerHTML = DOMPurify.sanitize(marked.parse(accumulatedContent));
+        }
     };
 }
 
@@ -347,7 +345,6 @@ if (savedChatId) {
     loadChat(savedChatId);
 }
 
-// Handle window resize for responsive design
 window.addEventListener('resize', () => {
     if (window.innerWidth > 768) {
         sidebar.classList.remove('-translate-x-full');
@@ -356,7 +353,6 @@ window.addEventListener('resize', () => {
     }
 });
 
-// Initial check for mobile devices
 if (window.innerWidth <= 768) {
     sidebar.classList.add('-translate-x-full');
 }
@@ -367,20 +363,17 @@ updateSidebarIcon();
 const uploadMenuButton = document.getElementById('uploadMenuButton');
 const uploadMenu = document.getElementById('uploadMenu');
 
-// 切换菜单显示
 uploadMenuButton.addEventListener('click', (e) => {
     e.stopPropagation();
     uploadMenu.classList.toggle('hidden');
 });
 
-// 点击外部区域关闭菜单
 document.addEventListener('click', (e) => {
     if (!uploadMenu.contains(e.target) && e.target !== uploadMenuButton) {
         uploadMenu.classList.add('hidden');
     }
 });
 
-// 菜单项点击后关闭菜单
 document.querySelectorAll('#uploadMenu a').forEach(item => {
     item.addEventListener('click', () => {
         uploadMenu.classList.add('hidden');
