@@ -166,7 +166,7 @@ public class RAGController {
     @PostMapping("generate_cases")
     public Response<GenerateCasesResponse> generateCases(
             @Valid @RequestBody GenerateCasesRequest request) {
-        log.info("生成测试用例请求, ragTag: {}", request.getRagTag());
+        log.info("生成测试用例请求, ragTag为: {}", request.getRagTag());
         return ragService.generateCases(request);
     }
 
