@@ -32,6 +32,58 @@ public class RAGController {
 
 
 
+/**
+ * ---------------------- 用例相关------------------------
+ */
+
+
+    /**
+     * 生成测试用例（流式）
+     */
+    @GetMapping(value = "generate_cases_stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> generateCasesStream(
+            @RequestParam("content") String content,
+            @RequestParam("ragTag") String ragTag) {
+        log.info("生成测试用例流式请求, ragTag: {}", ragTag);
+
+        GenerateCasesRequest request = GenerateCasesRequest.builder()
+                .content(content)
+                .ragTag(ragTag)
+                .build();
+
+        return ragService.generateCasesStream(request);
+    }
+
+
+    /**
+     * Rerank - 需求提炼和检索重排序
+     */
+    @PostMapping("rerank")
+    public Response<RerankResponse> rerank(
+            @Valid @RequestBody RerankRequest request) {
+        log.info("Rerank请求, ragTag: {}", request.getRagTag());
+        return ragService.query(request);
+    }
+
+
+    /**
+     * 查询知识库中的测试用例
+     */
+    @GetMapping("testcase/query")
+    public Response<QueryTestCaseResponse> queryTestCases(
+            @RequestParam("ragTag") String ragTag,
+            @RequestParam(value = "topK", required = false) Integer topK) {
+        log.info("查询测试用例请求, ragTag: {}", ragTag);
+        return ragService.queryTestCases(ragTag, topK);
+    }
+
+
+
+/**
+     * ---------------------- 采纳率------------------------
+     */
+
+
     /**
      * 采纳率实现：保存测试用例到知识库
      */
@@ -66,9 +118,30 @@ public class RAGController {
         return ragService.rejectTestCase(ragTag, caseId, reason);
     }
 
+    /**
+     * 批量更新用例采纳状态
+     */
+    @PostMapping("testcase/batch_adopt")
+    public Response<String> batchAdoptTestCases(
+            @RequestParam("ragTag") String ragTag,
+            @RequestBody List<String> caseIds) {
+        log.info("批量采纳测试用例, ragTag: {}, 数量: {}", ragTag, caseIds.size());
+        return ragService.batchAdoptTestCases(ragTag, caseIds);
+    }
+
+    /**
+     * 查询测试用例统计
+     */
+    @GetMapping("testcase/stats")
+    public Response<QueryTestCaseStatsResponse> queryTestCaseStats(@RequestParam("ragTag") String ragTag) {
+        log.info("查询测试用例统计, ragTag: {}", ragTag);
+        return ragService.queryTestCaseStats(ragTag);
+    }
 
 
-
+/**
+ * ---------------------- 知识库相关------------------------
+ */
 
     /**
      * 查询知识库标签列表
@@ -150,75 +223,6 @@ public class RAGController {
         return ragService.deleteKnowledge(ragTag, docId);
     }
 
-    /**
-     * Rerank - 需求提炼和检索重排序
-     */
-    @PostMapping("rerank")
-    public Response<RerankResponse> rerank(
-            @Valid @RequestBody RerankRequest request) {
-        log.info("Rerank请求, ragTag: {}", request.getRagTag());
-        return ragService.query(request);
-    }
-
-    /**
-     * 生成测试用例
-     */
-    @PostMapping("generate_cases")
-    public Response<GenerateCasesResponse> generateCases(
-            @Valid @RequestBody GenerateCasesRequest request) {
-        log.info("生成测试用例请求, ragTag为: {}", request.getRagTag());
-        return ragService.generateCases(request);
-    }
-
-    /**
-     * 生成测试用例（流式）
-     */
-    @GetMapping(value = "generate_cases_stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> generateCasesStream(
-            @RequestParam("content") String content,
-            @RequestParam("ragTag") String ragTag) {
-        log.info("生成测试用例流式请求, ragTag: {}", ragTag);
-
-        GenerateCasesRequest request = GenerateCasesRequest.builder()
-                .content(content)
-                .ragTag(ragTag)
-                .build();
-
-        return ragService.generateCasesStream(request);
-    }
-
-
-
-    /**
-     * 查询知识库中的测试用例
-     */
-    @GetMapping("testcase/query")
-    public Response<QueryTestCaseResponse> queryTestCases(
-            @RequestParam("ragTag") String ragTag,
-            @RequestParam(value = "topK", required = false) Integer topK) {
-        log.info("查询测试用例请求, ragTag: {}", ragTag);
-        return ragService.queryTestCases(ragTag, topK);
-    }
-
-    /**
-     * 批量更新用例采纳状态
-     */
-    @PostMapping("testcase/batch_adopt")
-    public Response<String> batchAdoptTestCases(
-            @RequestParam("ragTag") String ragTag,
-            @RequestBody List<String> caseIds) {
-        log.info("批量采纳测试用例, ragTag: {}, 数量: {}", ragTag, caseIds.size());
-        return ragService.batchAdoptTestCases(ragTag, caseIds);
-    }
-
-    /**
-     * 查询测试用例统计
-     */
-    @GetMapping("testcase/stats")
-    public Response<QueryTestCaseStatsResponse> queryTestCaseStats(@RequestParam("ragTag") String ragTag) {
-        log.info("查询测试用例统计, ragTag: {}", ragTag);
-        return ragService.queryTestCaseStats(ragTag);
-    }
 
     /**
      * 查询切分配置
@@ -257,5 +261,7 @@ public class RAGController {
             return Response.error("更新失败: " + e.getMessage());
         }
     }
+
+
 
 }

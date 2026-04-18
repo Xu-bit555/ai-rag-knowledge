@@ -44,12 +44,6 @@ public interface RAGService {
     Response<RerankResponse> query(RerankRequest request);
 
     /**
-     * 生成测试用例
-     * @param request 请求参数
-     */
-    Response<GenerateCasesResponse> generateCases(GenerateCasesRequest request);
-
-    /**
      * 生成测试用例（流式返回）
      * @param request 请求参数
      */
