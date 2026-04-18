@@ -45,7 +45,7 @@ public class AiController {
         ResponseBodyEmitter emitter = new ResponseBodyEmitter(3 * 60 * 1000L);
 
         try {
-            ThinkStreamFilter filter = new ThinkStreamFilter();
+            ThinkStreamFilter filter = new cn.bugstack.rag.service.impl.ThinkStreamFilterImpl();
             OpenAiChatOptions options = OpenAiChatOptions.builder()
                     .withModel("MiniMax-M2.7")
                     .build();

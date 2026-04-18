@@ -17,13 +17,6 @@ public interface RAGService {
     Response<QueryTagListResponse> queryRagTagList();
 
     /**
-     * 上传文件到知识库
-     * @param ragTag 知识库标签
-     * @param filePaths 文件路径列表
-     */
-    Response<String> uploadFiles(String ragTag, List<String> filePaths);
-
-    /**
      * 上传文件到知识库（不落盘，直接从字节流解析）
      * @param ragTag 知识库标签
      * @param fileBytes 文件字节数组
@@ -48,7 +41,7 @@ public interface RAGService {
      * Rerank - 需求提炼和向量检索重排序
      * @param request 请求参数
      */
-    Response<RerankResponse> rerank(RerankRequest request);
+    Response<RerankResponse> query(RerankRequest request);
 
     /**
      * 生成测试用例

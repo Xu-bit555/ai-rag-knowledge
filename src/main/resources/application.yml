@@ -40,12 +40,28 @@ spring:
         group: rag-ingest-group
         consumer: rag-ingest-consumer
 
+    # Embedding模型配置（支持切换）
+    embedding:
+      # 模型类型：bge / minimax / nomic
+      provider: bge
+      # 向量维度（BGE-large-zh 通常是 1024）
+      dimensions: 1024
+      # BGE模型（内部部署的OpenAI兼容API）
+      bge:
+        base-url: http://your-bge-service.internal.com
+        api-key: your-bge-api-key
+        model: bge-large-zh
+      # MiniMax Embedding
+      minimax:
+        base-url: https://api.minimax.chat
+        api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
+        model: embo-01
+
     # 向量存储配置
     vectorstore:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 1536
 
   datasource:
     url: jdbc:postgresql://49.232.146.225:15432/ai-rag-knowledge

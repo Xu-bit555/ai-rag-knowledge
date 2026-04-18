@@ -29,6 +29,47 @@ public class RAGController {
     @Resource
     private SplitterConfigService splitterConfigService;
 
+
+
+
+    /**
+     * 采纳率实现：保存测试用例到知识库
+     */
+    @PostMapping("testcase/save")
+    public Response<String> saveTestCases(
+            @Valid @RequestBody SaveTestCaseRequest request) {
+        log.info("保存测试用例请求, ragTag: {}", request.getRagTag());
+        return ragService.saveTestCases(request.getRagTag(), request.getTestCases());
+    }
+
+
+    /**
+     * 采纳测试用例
+     */
+    @PostMapping("testcase/adopt")
+    public Response<String> adoptTestCase(
+            @RequestParam("ragTag") String ragTag,
+            @RequestParam("caseId") String caseId) {
+        log.info("采纳测试用例, ragTag: {}, caseId: {}", ragTag, caseId);
+        return ragService.adoptTestCase(ragTag, caseId);
+    }
+
+    /**
+     * 拒绝测试用例
+     */
+    @PostMapping("testcase/reject")
+    public Response<String> rejectTestCase(
+            @RequestParam("ragTag") String ragTag,
+            @RequestParam("caseId") String caseId,
+            @RequestParam(value = "reason", required = false) String reason) {
+        log.info("拒绝测试用例, ragTag: {}, caseId: {}, reason: {}", ragTag, caseId, reason);
+        return ragService.rejectTestCase(ragTag, caseId, reason);
+    }
+
+
+
+
+
     /**
      * 查询知识库标签列表
      */
@@ -116,7 +157,7 @@ public class RAGController {
     public Response<RerankResponse> rerank(
             @Valid @RequestBody RerankRequest request) {
         log.info("Rerank请求, ragTag: {}", request.getRagTag());
-        return ragService.rerank(request);
+        return ragService.query(request);
     }
 
     /**
@@ -146,15 +187,7 @@ public class RAGController {
         return ragService.generateCasesStream(request);
     }
 
-    /**
-     * 保存测试用例到知识库
-     */
-    @PostMapping("testcase/save")
-    public Response<String> saveTestCases(
-            @Valid @RequestBody SaveTestCaseRequest request) {
-        log.info("保存测试用例请求, ragTag: {}", request.getRagTag());
-        return ragService.saveTestCases(request.getRagTag(), request.getTestCases());
-    }
+
 
     /**
      * 查询知识库中的测试用例
@@ -165,29 +198,6 @@ public class RAGController {
             @RequestParam(value = "topK", required = false) Integer topK) {
         log.info("查询测试用例请求, ragTag: {}", ragTag);
         return ragService.queryTestCases(ragTag, topK);
-    }
-
-    /**
-     * 采纳测试用例
-     */
-    @PostMapping("testcase/adopt")
-    public Response<String> adoptTestCase(
-            @RequestParam("ragTag") String ragTag,
-            @RequestParam("caseId") String caseId) {
-        log.info("采纳测试用例, ragTag: {}, caseId: {}", ragTag, caseId);
-        return ragService.adoptTestCase(ragTag, caseId);
-    }
-
-    /**
-     * 拒绝测试用例
-     */
-    @PostMapping("testcase/reject")
-    public Response<String> rejectTestCase(
-            @RequestParam("ragTag") String ragTag,
-            @RequestParam("caseId") String caseId,
-            @RequestParam(value = "reason", required = false) String reason) {
-        log.info("拒绝测试用例, ragTag: {}, caseId: {}, reason: {}", ragTag, caseId, reason);
-        return ragService.rejectTestCase(ragTag, caseId, reason);
     }
 
     /**
