@@ -42,6 +42,8 @@ public class RAGServiceImpl implements cn.bugstack.rag.service.RAGService {
     private cn.bugstack.rag.service.ParagraphIngestService paragraphIngestService;
     @Resource
     private ThinkStreamFilter thinkStreamFilter;
+    @Resource
+    private cn.bugstack.rag.service.QueryRewriteService queryRewriteService;
 
     @Value("${spring.ai.minimax.model:MiniMax-M2.7}")
     private String defaultModel;
@@ -64,10 +66,9 @@ public class RAGServiceImpl implements cn.bugstack.rag.service.RAGService {
                 List<String> scenarios = requirementExtractService.parseExtractedScenarios(extractedResult);
 
                 // 2. 分别检索 知识库文档 和 历史测试用例
-                // a. 知识库文档（无重排序，直接返回）
+                // a. 知识库文档（检索时已过滤 type == 'knowledge'）
                 List<String> knowledgeDocs = vectorStoreRepository.similaritySearchWithDeduplication(
                         scenarios, request.getRagTag(), 5);
-                knowledgeDocs = filterOutTestCases(knowledgeDocs);
 
                 // b. 用例库检索：向量检索 → MMR → Rerank（仅查已采纳用例）
                 List<String> rerankedCases = rerankService.rerankTestCases(
@@ -103,38 +104,6 @@ public class RAGServiceImpl implements cn.bugstack.rag.service.RAGService {
     }
 
 
-
-    @Override
-    public Response<RerankResponse> query(RerankRequest request) {
-        try {
-            log.info("Rerank请求, content: {} ,ragTag: {}", request.getContent(), request.getRagTag() );
-
-            // 1. 提炼需求
-            String extractPrompt = requirementExtractService.buildExtractPrompt(request.getContent());
-            String extractedResult = chat(extractPrompt);
-            List<String> scenarios = requirementExtractService.parseExtractedScenarios(extractedResult);
-
-            log.info("需求提炼完成, 场景数: {}, 场景内容: {}", scenarios.size(), scenarios);
-
-            // 2-3. 向量检索 + MMR + Rerank（使用真实向量检索分数）
-            List<String> rerankedCases = scenarios.isEmpty()
-                    ? List.of()
-                    : rerankService.rerank(scenarios, request.getRagTag(), 10);  // 提炼成多场景的内容
-
-            log.info("Rerank完成, 最终用例数: {}", rerankedCases.size());
-
-            // 返回解析后的场景描述，而不是原始LLM输出
-            String finalScenarios = String.join("\n", scenarios);
-
-            return Response.ok(RerankResponse.builder()
-                    .rerankedCases(rerankedCases)
-                    .extractedScenarios(finalScenarios)
-                    .build());
-        } catch (Exception e) {
-            log.error("Rerank失败", e);
-            return Response.error("Rerank失败: " + e.getMessage());
-        }
-    }
 
     @Override
     public Response<QueryTagListResponse> queryRagTagList() {
@@ -286,67 +255,7 @@ public class RAGServiceImpl implements cn.bugstack.rag.service.RAGService {
     /**
      * 从文档列表中过滤掉测试用例
      */
-    private List<String> filterOutTestCases(List<String> docs) {
-        // 这里简化处理，实际可以从metadata中判断type
-        // 暂时通过内容特征过滤：如果包含 "steps" 和 "assertions" 很可能是测试用例
-        return docs.stream()
-                .filter(doc -> {
-                    String lower = doc.toLowerCase();
-                    return !(lower.contains("\"steps\"") && lower.contains("\"assertions\""));
-                })
-                .toList();
-    }
-
     // ==================== 私有方法 ====================
-
-    /**
-     * 对话请求
-     */
-    private String chat(String prompt) {
-        int maxRetries = 2;
-        Exception lastException = null;
-
-        for (int retry = 0; retry < maxRetries; retry++) {
-            try {
-                OpenAiChatOptions options = OpenAiChatOptions.builder()
-                        .withModel(defaultModel)
-                        .build();
-
-                var response = chatClient.call(new Prompt(prompt, options));
-                var result = response.getResult();
-
-                if (result == null) {
-                    log.warn("LLM响应结果为null, retry: {}", retry);
-                    continue;
-                }
-
-                var output = result.getOutput();
-                if (output == null) {
-                    log.warn("LLM响应output为null, retry: {}", retry);
-                    continue;
-                }
-
-                String content = output.getContent();
-                if (content == null || content.isBlank()) {
-                    log.warn("LLM响应content为空, retry: {}", retry);
-                    continue;
-                }
-
-                return content;
-
-            } catch (NullPointerException e) {
-                // MiniMax API 不返回 usage 字段，Spring AI 内部处理时会抛 NPE
-                log.warn("LLM响应处理NPE, retry: {}, msg: {}", retry, e.getMessage());
-                lastException = e;
-            } catch (Exception e) {
-                log.error("LLM调用异常, retry: {}, msg: {}", retry, e.getMessage());
-                lastException = e;
-            }
-        }
-
-        // 所有重试都失败
-        throw new RuntimeException("LLM调用失败，已重试" + maxRetries + "次", lastException);
-    }
 
     /**
      * 流式对话
@@ -486,12 +395,49 @@ public class RAGServiceImpl implements cn.bugstack.rag.service.RAGService {
     }
 
     @Override
-    public Response<QueryKnowledgeResponse> queryKnowledge(String ragTag, Integer topK) {
+    public Response<QueryKnowledgeResponse> queryKnowledge(String ragTag, String query, Integer topK) {
         try {
-            log.info("查询知识库文档, ragTag: {}, topK: {}", ragTag, topK);
+            log.info("查询知识库文档, ragTag: {}, query: {}", ragTag, query);
 
             int limit = topK != null && topK > 0 ? topK : 50;
-            List<QueryKnowledgeResponse.KnowledgeDoc> docs = vectorStoreRepository.queryKnowledgeDocs(ragTag, limit);
+
+            List<QueryKnowledgeResponse.KnowledgeDoc> docs;
+            if (query == null || query.trim().isBlank()) {
+                // 无 query 时返回最新文档（保持向后兼容）
+                docs = vectorStoreRepository.queryKnowledgeDocs(ragTag, limit);
+            } else {
+                // 有 query 时进行 Query Rewrite + 语义检索
+                String rewrittenQuery = queryRewriteService.rewriteToSingle(query.trim());
+                log.info("Query Rewrite: {} -> {}", query, rewrittenQuery);
+
+                // 获取所有重写后的查询，进行多查询检索
+                List<String> allQueries = queryRewriteService.rewrite(query.trim());
+                log.info("多查询检索, 查询数量: {}, queries: {}", allQueries.size(), allQueries);
+
+                // 对每个查询进行检索，然后合并去重
+                List<QueryKnowledgeResponse.KnowledgeDoc> allDocs = new java.util.ArrayList<>();
+                for (String q : allQueries) {
+                    List<QueryKnowledgeResponse.KnowledgeDoc> docsForQuery =
+                            vectorStoreRepository.queryKnowledgeDocsWithScore(ragTag, q, limit);
+                    allDocs.addAll(docsForQuery);
+                }
+
+                // 按 score 去重（保留最高分）
+                Map<String, QueryKnowledgeResponse.KnowledgeDoc> uniqueDocs = new java.util.LinkedHashMap<>();
+                for (QueryKnowledgeResponse.KnowledgeDoc doc : allDocs) {
+                    String key = doc.getDocId();
+                    if (!uniqueDocs.containsKey(key) ||
+                            (doc.getScore() != null && doc.getScore() > uniqueDocs.get(key).getScore())) {
+                        uniqueDocs.put(key, doc);
+                    }
+                }
+
+                docs = new java.util.ArrayList<>(uniqueDocs.values());
+                // 限制返回数量
+                if (docs.size() > limit) {
+                    docs = docs.subList(0, limit);
+                }
+            }
 
             return Response.ok(QueryKnowledgeResponse.builder()
                     .documents(docs)

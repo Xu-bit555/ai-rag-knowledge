@@ -38,12 +38,6 @@ public interface RAGService {
     Response<String> createRagTag(String ragTag);
 
     /**
-     * Rerank - 需求提炼和向量检索重排序
-     * @param request 请求参数
-     */
-    Response<RerankResponse> query(RerankRequest request);
-
-    /**
      * 生成测试用例（流式返回）
      * @param request 请求参数
      */
@@ -86,11 +80,12 @@ public interface RAGService {
     Response<String> batchAdoptTestCases(String ragTag, List<String> caseIds);
 
     /**
-     * 查询知识库文档
+     * 查询知识库文档（语义检索）
      * @param ragTag 知识库标签
+     * @param query 查询文本（语义搜索）
      * @param topK 查询数量
      */
-    Response<QueryKnowledgeResponse> queryKnowledge(String ragTag, Integer topK);
+    Response<QueryKnowledgeResponse> queryKnowledge(String ragTag, String query, Integer topK);
 
     /**
      * 删除知识库文档

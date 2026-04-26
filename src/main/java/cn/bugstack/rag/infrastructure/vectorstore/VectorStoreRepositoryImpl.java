@@ -120,16 +120,19 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
         List<Document> docs = vectorStore.similaritySearch(request);
 
         // 计算query的embedding
-        List<List<Double>> queryEmbeddings = embeddingClient.embed(List.of(query));
-        double[] queryVector = queryEmbeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray();
+        double[] queryVector = embeddingClient.embed(List.of(query)).get(0).stream()
+                .mapToDouble(Double::doubleValue).toArray();
+
+        // 批量计算文档的embedding
+        List<String> docContents = docs.stream().map(Document::getContent).toList();
+        List<List<Double>> allDocEmbeddings = embeddingClient.embed(docContents);
 
         // 计算每个文档的相似度分数
         List<DocumentWithScoreDTO> results = new ArrayList<>();
-        for (Document doc : docs) {
-            List<List<Double>> docEmbeddings = embeddingClient.embed(List.of(doc.getContent()));
-            double[] docVector = docEmbeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray();
+        for (int i = 0; i < docs.size(); i++) {
+            double[] docVector = allDocEmbeddings.get(i).stream().mapToDouble(Double::doubleValue).toArray();
             double similarity = cosineSimilarity(queryVector, docVector);
-            results.add(new DocumentWithScoreDTO(doc.getContent(), similarity));
+            results.add(new DocumentWithScoreDTO(docs.get(i).getContent(), similarity));
         }
 
         // 按分数降序排序
@@ -164,7 +167,7 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
             String cleanQuery = query.replaceAll("^\\d+\\.\\s*", "").trim();
             SearchRequest request = SearchRequest.query(cleanQuery)
                     .withTopK(topK)
-                    .withFilterExpression("knowledge == '" + knowledgeTag + "'");
+                    .withFilterExpression("knowledge == '" + knowledgeTag + "' AND type == 'knowledge'");
             List<Document> docs = vectorStore.similaritySearch(request);
             allResults.addAll(docs.stream().map(Document::getContent).toList());
         }
@@ -176,36 +179,51 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public List<DocumentWithScoreDTO> similaritySearchWithScoreWithDeduplication(List<String> queries, String knowledgeTag, int topK) {
         log.info("带分数去重检索, queries数量: {}, knowledgeTag: {}, topK: {}", queries.size(), knowledgeTag, topK);
 
-        // 1. 计算所有 query 的 embedding 向量
-        List<double[]> queryEmbeddings = new ArrayList<>();
+        // 1. 清洗 queries 并批量 embedding
+        List<String> cleanQueries = new ArrayList<>();
         for (String query : queries) {
             if (query.trim().isEmpty()) continue;
-            String cleanQuery = query.replaceAll("^\\d+\\.\\s*", "").trim();
-            List<List<Double>> embeddings = embeddingClient.embed(List.of(cleanQuery));
-            queryEmbeddings.add(embeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray());
+            cleanQueries.add(query.replaceAll("^\\d+\\.\\s*", "").trim());
         }
 
-        if (queryEmbeddings.isEmpty()) {
+        if (cleanQueries.isEmpty()) {
             return List.of();
         }
 
-        // 2. 每个 query 分别检索，记录 (文档, 分数)
+        // 批量 embedding 所有 queries（1次 API 调用）
+        List<double[]> queryEmbeddings = embeddingClient.embed(cleanQueries).stream()
+                .map(list -> list.stream().mapToDouble(Double::doubleValue).toArray())
+                .toList();
+
+        // 2. 每个 query 分别检索
         Map<String, List<Double>> docScoresMap = new LinkedHashMap<>();
-        for (double[] queryEmbedding : queryEmbeddings) {
-            SearchRequest request = SearchRequest.query("")
+        List<String> uniqueDocContents = new ArrayList<>();
+
+        for (int qi = 0; qi < cleanQueries.size(); qi++) {
+            String cleanQuery = cleanQueries.get(qi);
+            double[] queryEmbedding = queryEmbeddings.get(qi);
+
+            SearchRequest request = SearchRequest.query(cleanQuery)
                     .withTopK(topK)
                     .withFilterExpression("knowledge == '" + knowledgeTag + "'");
             List<Document> docs = vectorStore.similaritySearch(request);
 
             for (Document doc : docs) {
                 String content = doc.getContent();
-                List<List<Double>> docEmbeddings = embeddingClient.embed(List.of(content));
+                if (!docScoresMap.containsKey(content)) {
+                    docScoresMap.put(content, new ArrayList<>());
+                    uniqueDocContents.add(content);
+                }
                 // 计算该 query 与文档的余弦相似度
-                double[] docVector = docEmbeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray();
+                double[] docVector = embeddingClient.embed(List.of(content)).get(0).stream()
+                        .mapToDouble(Double::doubleValue).toArray();
                 double similarity = cosineSimilarity(queryEmbedding, docVector);
-
-                docScoresMap.computeIfAbsent(content, k -> new ArrayList<>()).add(similarity);
+                docScoresMap.get(content).add(similarity);
             }
+        }
+
+        if (docScoresMap.isEmpty()) {
+            return List.of();
         }
 
         // 3. 每个文档取多 query 的平均分数
@@ -226,34 +244,49 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public List<DocumentWithScoreDTO> similaritySearchTestCasesWithScore(List<String> queries, String ragTag, int topK) {
         log.info("用例库带分数检索, queries数量: {}, ragTag: {}, topK: {}", queries.size(), ragTag, topK);
 
-        // 1. 计算所有 query 的 embedding 向量
-        List<double[]> queryEmbeddings = new ArrayList<>();
+        // 1. 清洗 queries 并批量 embedding
+        List<String> cleanQueries = new ArrayList<>();
         for (String query : queries) {
             if (query.trim().isEmpty()) continue;
-            String cleanQuery = query.replaceAll("^\\d+\\.\\s*", "").trim();
-            List<List<Double>> embeddings = embeddingClient.embed(List.of(cleanQuery));
-            queryEmbeddings.add(embeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray());
+            cleanQueries.add(query.replaceAll("^\\d+\\.\\s*", "").trim());
         }
 
-        if (queryEmbeddings.isEmpty()) {
+        if (cleanQueries.isEmpty()) {
             return List.of();
         }
 
-        // 2. 每个 query 分别检索（过滤：test_case + ADOPTED），记录 (文档, 分数)
+        // 批量 embedding 所有 queries（1次 API 调用）
+        List<double[]> queryEmbeddings = embeddingClient.embed(cleanQueries).stream()
+                .map(list -> list.stream().mapToDouble(Double::doubleValue).toArray())
+                .toList();
+
+        // 2. 每个 query 分别检索（过滤：test_case + ADOPTED）
         Map<String, List<Double>> docScoresMap = new LinkedHashMap<>();
-        for (double[] queryEmbedding : queryEmbeddings) {
-            SearchRequest request = SearchRequest.query("")
+
+        for (int qi = 0; qi < cleanQueries.size(); qi++) {
+            String cleanQuery = cleanQueries.get(qi);
+            double[] queryEmbedding = queryEmbeddings.get(qi);
+
+            SearchRequest request = SearchRequest.query(cleanQuery)
                     .withTopK(topK)
                     .withFilterExpression("knowledge == '" + ragTag + "' AND type == 'test_case' AND adoptionStatus == 'ADOPTED'");
             List<Document> docs = vectorStore.similaritySearch(request);
 
             for (Document doc : docs) {
                 String content = doc.getContent();
-                List<List<Double>> docEmbeddings = embeddingClient.embed(List.of(content));
-                double[] docVector = docEmbeddings.get(0).stream().mapToDouble(Double::doubleValue).toArray();
+                if (!docScoresMap.containsKey(content)) {
+                    docScoresMap.put(content, new ArrayList<>());
+                }
+                // 计算该 query 与文档的余弦相似度
+                double[] docVector = embeddingClient.embed(List.of(content)).get(0).stream()
+                        .mapToDouble(Double::doubleValue).toArray();
                 double similarity = cosineSimilarity(queryEmbedding, docVector);
-                docScoresMap.computeIfAbsent(content, k -> new ArrayList<>()).add(similarity);
+                docScoresMap.get(content).add(similarity);
             }
+        }
+
+        if (docScoresMap.isEmpty()) {
+            return List.of();
         }
 
         // 3. 每个文档取多 query 的平均分数
@@ -318,22 +351,53 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
             return QueryKnowledgeResponse.KnowledgeDoc.builder()
                     .content(content)
                     .sourceDoc(metadata != null ? (String) metadata.get("sourceDoc") : null)
-                    .paragraphIndex(metadata != null ? (Integer) metadata.get("paragraphIndex") : null)
                     .build();
         }, ragTag, topK);
     }
 
     @Override
-    public void deleteKnowledgeDoc(String ragTag, String docId) {
-        log.info("删除知识库文档, ragTag: {}, docId: {}", ragTag, docId);
+    public List<QueryKnowledgeResponse.KnowledgeDoc> queryKnowledgeDocsWithScore(String ragTag, String query, int topK) {
+        log.info("语义检索知识库文档, ragTag: {}, query: {}, topK: {}", ragTag, query, topK);
+
+        SearchRequest request = SearchRequest.query(query)
+                .withTopK(topK)
+                .withFilterExpression("knowledge == '" + ragTag + "' AND type == 'knowledge'");
+        List<Document> docs = vectorStore.similaritySearch(request);
+
+        return docs.stream().map(doc ->
+                QueryKnowledgeResponse.KnowledgeDoc.builder()
+                        .content(doc.getContent())
+                        .sourceDoc((String) doc.getMetadata().get("sourceDoc"))
+                        .build()
+        ).toList();
+    }
+
+
+    @Override
+    public void deleteByDocId(String ragTag, String docId) {
+        log.info("根据docId删除所有相关chunk, ragTag: {}, docId: {}", ragTag, docId);
 
         String sql = """
             DELETE FROM spring_ai_vectors
             WHERE metadata->>'knowledge' = ?
-              AND id = ?
+              AND metadata->>'docId' = ?
             """;
 
-        jdbcTemplate.update(sql, ragTag, Long.parseLong(docId));
+        int deleted = jdbcTemplate.update(sql, ragTag, docId);
+        log.info("根据docId删除chunk完成, ragTag: {}, docId: {}, 删除数量: {}", ragTag, docId, deleted);
+    }
+
+    @Override
+    public List<Long> findChunkIdsByDocId(String ragTag, String docId) {
+        log.debug("查询docId对应的chunkIds, ragTag: {}, docId: {}", ragTag, docId);
+
+        String sql = """
+            SELECT id FROM spring_ai_vectors
+            WHERE metadata->>'knowledge' = ?
+              AND metadata->>'docId' = ?
+            """;
+
+        return jdbcTemplate.queryForList(sql, Long.class, ragTag, docId);
     }
 
 }

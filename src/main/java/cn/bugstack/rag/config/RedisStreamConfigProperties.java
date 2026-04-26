@@ -27,4 +27,19 @@ public class RedisStreamConfigProperties {
      */
     private String consumer = "rag-ingest-consumer";
 
+    /**
+     * 更新消息Stream键（文档变更事件）
+     */
+    private String updateStreamKey = "rag:update:stream";
+
+    /**
+     * 更新消息消费组
+     */
+    private String updateGroup = "rag-update-group";
+
+    /**
+     * 更新消息消费者名称
+     */
+    private String updateConsumer = "rag-update-consumer";
+
 }

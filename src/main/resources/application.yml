@@ -35,6 +35,8 @@ spring:
         min-chunk-length-to-embed: 5
         merge-chunk-length: 200
         keep-separator: true
+        overlap-tokens: 200
+        batch-size: 200
       stream:
         stream-key: rag:ingest:stream
         group: rag-ingest-group

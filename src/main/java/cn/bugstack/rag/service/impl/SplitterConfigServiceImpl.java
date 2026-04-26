@@ -23,6 +23,10 @@ public class SplitterConfigServiceImpl implements cn.bugstack.rag.service.Splitt
         config.setMinChunkLengthToEmbed(properties.getMinChunkLengthToEmbed());
         config.setMergeChunkLength(properties.getMergeChunkLength());
         config.setKeepSeparator(properties.isKeepSeparator());
+        config.setOverlapTokens(properties.getOverlapTokens());
+        config.setSemanticSplitEnabled(properties.isSemanticSplitEnabled());
+        config.setSemanticSplitLevel(properties.getSemanticSplitLevel());
+        config.setOverlapChars(properties.getOverlapChars());
         return config;
     }
 
@@ -41,12 +45,22 @@ public class SplitterConfigServiceImpl implements cn.bugstack.rag.service.Splitt
             properties.setMergeChunkLength(config.getMergeChunkLength());
         }
         properties.setKeepSeparator(config.isKeepSeparator());
+        if (config.getOverlapTokens() >= 0) {
+            properties.setOverlapTokens(config.getOverlapTokens());
+        }
+        properties.setSemanticSplitEnabled(config.isSemanticSplitEnabled());
+        if (config.getSemanticSplitLevel() > 0) {
+            properties.setSemanticSplitLevel(config.getSemanticSplitLevel());
+        }
+        if (config.getOverlapChars() >= 0) {
+            properties.setOverlapChars(config.getOverlapChars());
+        }
 
-        log.info("切分配置已更新: maxTokens={}, minTokens={}, minChunkLengthToEmbed={}, mergeChunkLength={}, keepSeparator={}",
+        log.info("切分配置已更新: maxTokens={}, minTokens={}, semanticSplitEnabled={}, semanticSplitLevel={}, overlapChars={}",
                 properties.getMaxTokens(),
                 properties.getMinTokens(),
-                properties.getMinChunkLengthToEmbed(),
-                properties.getMergeChunkLength(),
-                properties.isKeepSeparator());
+                properties.isSemanticSplitEnabled(),
+                properties.getSemanticSplitLevel(),
+                properties.getOverlapChars());
     }
 }

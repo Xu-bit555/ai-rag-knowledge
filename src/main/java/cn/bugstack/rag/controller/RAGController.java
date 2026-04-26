@@ -56,17 +56,6 @@ public class RAGController {
 
 
     /**
-     * Rerank - 需求提炼和检索重排序
-     */
-    @PostMapping("rerank")
-    public Response<RerankResponse> rerank(
-            @Valid @RequestBody RerankRequest request) {
-        log.info("Rerank请求, ragTag: {}", request.getRagTag());
-        return ragService.query(request);
-    }
-
-
-    /**
      * 查询知识库中的测试用例
      */
     @GetMapping("testcase/query")
@@ -202,14 +191,15 @@ public class RAGController {
     }
 
     /**
-     * 查询知识库文档列表
+     * 查询知识库文档（语义检索）
      */
     @GetMapping("knowledge/query")
     public Response<QueryKnowledgeResponse> queryKnowledge(
             @RequestParam("ragTag") String ragTag,
+            @RequestParam(value = "query", required = false) String query,
             @RequestParam(value = "topK", required = false) Integer topK) {
-        log.info("查询知识库文档, ragTag: {}", ragTag);
-        return ragService.queryKnowledge(ragTag, topK);
+        log.info("查询知识库文档, ragTag: {}, query: {}", ragTag, query);
+        return ragService.queryKnowledge(ragTag, query, topK);
     }
 
     /**

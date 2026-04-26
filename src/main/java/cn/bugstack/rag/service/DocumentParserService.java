@@ -91,5 +91,6 @@ public interface DocumentParserService {
         private String content;
         private DocumentMetadata metadata;
         private List<Paragraph> paragraphs;
+        private List<TableParserService.Table> tables;  // 新增：提取的表格列表
     }
 }

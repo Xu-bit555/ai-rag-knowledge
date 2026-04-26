@@ -53,25 +53,5 @@ public class QueryKnowledgeResponse {
          * 来源文档名
          */
         private String sourceDoc;
-
-        /**
-         * 页码
-         */
-        private Integer pageNumber;
-
-        /**
-         * 段落索引
-         */
-        private Integer paragraphIndex;
-
-        /**
-         * 创建时间
-         */
-        private Long createdAt;
-
-        /**
-         * 字符数
-         */
-        private Integer charCount;
     }
 }

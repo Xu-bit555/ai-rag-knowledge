@@ -21,11 +21,22 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 文档摄入消费者 - 消息队列消费者
- * 处理Redis Stream中的文档摄入任务
+ * 文档摄入消费者 - 基于 Redis Stream 的异步消息处理
+ *
+ * <p>核心设计：
+ * <pre>
+ * 1. 可靠投递：Consumer Group + PEL 机制，消息持久化不丢失
+ * 2. 顺序执行：同一 taskId 只被一个消费者领取
+ * 3. ACK 确认：先更新DB状态，再执行ACK，防止消息丢失
+ * 4. 自动重试：PEL 死信巡检，超时消息自动回收重试
+ * 5. 幂等防御：多层状态拦截（COMPLETED/PROCESSING/FAILED）
+ * </pre>
  */
 @Slf4j
 @Component
@@ -33,34 +44,49 @@ public class DocumentIngestConsumer {
 
     @Resource
     private RedissonClient redissonClient;
+
     @Resource
     private RedisStreamConfigProperties streamConfig;
+
     @Resource
     private IIngestTaskRepository ingestTaskRepository;
+
     @Resource
-    private cn.bugstack.rag.service.DocumentETLService documentETLService;
+    private DocumentETLService documentETLService;
 
     private final AtomicBoolean running = new AtomicBoolean(true);
+
     private Thread workerThread;
     private Thread pendingClaimThread;
 
     private static final int MAX_RETRY_COUNT = 3;
     private static final Duration CLAIM_TIMEOUT = Duration.ofMinutes(5);
 
+    private final ExecutorService fileDeleteExecutor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors(),
+            r -> new Thread(r, "file-delete-worker")
+    );
+
+    /**
+     * 启动消费者
+     */
     @PostConstruct
     public void start() {
         RStream<String, String> stream = redissonClient.getStream(streamConfig.getStreamKey());
+
+        // 创建消费者组（如已存在则忽略）
         try {
             stream.createGroup(StreamCreateGroupArgs.name(streamConfig.getGroup()).makeStream());
         } catch (RedisBusyException ignored) {
             log.info("Stream group已存在");
         }
 
-        workerThread = new Thread(this::loop, "document-ingest-consumer");
+        // 启动消息处理主循环
+        workerThread = new Thread(this::consumeLoop, "document-ingest-consumer");
         workerThread.setDaemon(true);
         workerThread.start();
 
-        // 启动超时回收线程，定期检查并回收 pending 消息
+        // 启动死信回收线程
         pendingClaimThread = new Thread(this::pendingClaimLoop, "pending-claim-consumer");
         pendingClaimThread.setDaemon(true);
         pendingClaimThread.start();
@@ -68,52 +94,139 @@ public class DocumentIngestConsumer {
         log.info("文档摄入消费者已启动");
     }
 
-    private void loop() {
+    /**
+     * 消息消费主循环
+     */
+    private void consumeLoop() {
         RStream<String, String> stream = redissonClient.getStream(streamConfig.getStreamKey());
         String group = streamConfig.getGroup();
         String consumer = streamConfig.getConsumer();
-        var readArgs = StreamReadGroupArgs.neverDelivered().count(1).timeout(Duration.ofSeconds(5));
 
         while (running.get()) {
             try {
-                // 确保消费者组存在
-                ensureGroupExists(stream, group);
+                // 确保消费者组存在（可能因 Redis 重启而消失）
+                try {
+                    stream.createGroup(StreamCreateGroupArgs.name(group).makeStream());
+                } catch (RedisBusyException ignored) {
+                    // 组已存在
+                } catch (RedisException e) {
+                    log.debug("创建消费者组失败: {}", e.getMessage());
+                }
 
-                Map<StreamMessageId, Map<String, String>> messages = stream.readGroup(group, consumer, readArgs);
+                // 读取消息（阻塞5秒，未读到则继续轮询）
+                Map<StreamMessageId, Map<String, String>> messages = stream.readGroup(
+                        group, consumer,
+                        StreamReadGroupArgs.neverDelivered().count(1).timeout(Duration.ofSeconds(5))
+                );
+
                 if (messages == null || messages.isEmpty()) {
                     continue;
                 }
 
+                // 逐条处理消息
                 for (Map.Entry<StreamMessageId, Map<String, String>> entry : messages.entrySet()) {
-                    StreamMessageId id = entry.getKey();
-                    Map<String, String> body = entry.getValue();
-                    processMessageWithRetry(body, stream, group, id);
+                    processMessage(entry.getKey(), entry.getValue(), stream, group);
                 }
+
             } catch (RedisException e) {
-                // NOGROUP 等错误，忽略并等待下次重试
                 log.warn("Redis Stream消费异常: {}", e.getMessage());
-                sleep(1000);
+                Thread.sleep(1000);
             } catch (Exception e) {
                 log.error("消费消息失败", e);
-                sleep(1000);
+                Thread.sleep(1000);
             }
         }
     }
 
-    private void ensureGroupExists(RStream<String, String> stream, String group) {
+    /**
+     * 核心消息处理（整合所有业务逻辑）
+     *
+     * <p>流程：状态检查 → 幂等拦截 → 状态更新 → ETL执行 → DB状态同步 → ACK确认
+     */
+    private void processMessage(StreamMessageId id, Map<String, String> body,
+                                RStream<String, String> stream, String group) {
+        String taskId = body.get("taskId");
+        String ragTag = body.get("ragTag");
+        String filePath = body.get("filePath");
+
+        // 1. 幂等性防御：多层状态拦截
+        IngestTask task = ingestTaskRepository.findById(taskId);
+        if (task == null) {
+            log.warn("任务不存在, taskId: {}, 忽略消息", taskId);
+            stream.ack(group, id);
+            return;
+        }
+
+        IngestTask.TaskStatus status = task.getStatus();
+        if (status == IngestTask.TaskStatus.COMPLETED) {
+            log.info("任务已完成（幂等跳过）, taskId: {}", taskId);
+            stream.ack(group, id);
+            return;
+        }
+
+        if (status == IngestTask.TaskStatus.PROCESSING) {
+            // 防御性忽略：可能为上一个消费者崩溃后的恢复消息
+            log.warn("任务正在处理中（防御性忽略，由 pendingClaim 回收）, taskId: {}", taskId);
+            stream.ack(group, id);
+            return;
+        }
+
+        if (status == IngestTask.TaskStatus.FAILED) {
+            log.warn("任务已失败（最终状态）, taskId: {}, 忽略消息", taskId);
+            stream.ack(group, id);
+            return;
+        }
+
+        // 2. 状态机驱动：PENDING → PROCESSING（乐观锁预占）
+        ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.PROCESSING, null);
+
+        // 3. 执行 ETL 流水线
+        Exception businessException = null;
         try {
-            stream.createGroup(StreamCreateGroupArgs.name(group).makeStream());
-        } catch (RedisBusyException ignored) {
-            // 组已存在，忽略
-        } catch (RedisException e) {
-            // 可能stream不存在，等待下次重试
-            log.debug("创建消费者组失败: {}", e.getMessage());
+            documentETLService.etlPipeline(
+                    new org.springframework.core.io.FileSystemResource(filePath),
+                    filePath,
+                    ragTag
+            );
+        } catch (Exception e) {
+            businessException = e;
+        }
+
+        // 4. 分布式状态一致性：先更新DB最终状态，再执行ACK
+        if (businessException == null) {
+            // 成功：DB=COMPLETED → ACK → 异步删除文件
+            ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.COMPLETED, null);
+            stream.ack(group, id);
+
+            // 异步解耦：文件删除与任务状态完全解耦
+            if (filePath != null) {
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        Files.deleteIfExists(Paths.get(filePath));
+                    } catch (Exception e) {
+                        log.warn("文件异步删除失败（不影响任务状态）, filePath: {}", filePath, e);
+                    }
+                }, fileDeleteExecutor);
+            }
+
+            log.info("摄入任务完成, taskId: {}", taskId);
+        } else {
+            // 失败：DB=FAILED → ACK（利用 PEL + pendingClaimLoop 死信巡检处理重试）
+            String errMsg = businessException.getMessage();
+            if (errMsg == null) errMsg = businessException.getClass().getName();
+            if (errMsg.length() > 2000) errMsg = errMsg.substring(0, 2000);
+
+            ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.FAILED, errMsg);
+            stream.ack(group, id);
+
+            log.error("摄入任务失败, taskId: {}, 错误: {}", taskId, errMsg, businessException);
         }
     }
 
     /**
-     * 定时回收超时未处理的消息（Pending Message Claim）
-     * 处理场景：消费者拿到消息后崩溃，消息未 Ack，需要超时回收
+     * 死信回收循环：定时回收超5分钟未处理的消息
+     *
+     * <p>处理场景：消费者领取消息后崩溃，消息未ACK，由 pendingClaimLoop 超时回收
      */
     private void pendingClaimLoop() {
         RStream<String, String> stream = redissonClient.getStream(streamConfig.getStreamKey());
@@ -122,32 +235,34 @@ public class DocumentIngestConsumer {
 
         while (running.get()) {
             try {
-                // 每分钟检查一次超时消息
-                Thread.sleep(60000);
+                Thread.sleep(60000);  // 每分钟检查一次
 
-                // 尝试回收超过5分钟未处理的消息
-                var claimArgs = StreamReadGroupArgs.greaterThan(StreamMessageId.NEVER_DELIVERED).count(10);
-                Map<StreamMessageId, Map<String, String>> pending = stream.readGroup(group, claimConsumer, claimArgs);
+                // 读取 PEL 中超时的消息
+                Map<StreamMessageId, Map<String, String>> pending = stream.readGroup(
+                        group, claimConsumer,
+                        StreamReadGroupArgs.greaterThan(StreamMessageId.NEVER_DELIVERED).count(10)
+                );
 
-                if (pending != null && !pending.isEmpty()) {
-                    log.info("回收超时消息, 数量: {}", pending.size());
-                    for (Map.Entry<StreamMessageId, Map<String, String>> entry : pending.entrySet()) {
-                        StreamMessageId id = entry.getKey();
-                        Map<String, String> body = entry.getValue();
-                        // 重置任务状态为 PENDING，重新入队
-                        String taskId = body.get("taskId");
-                        if (taskId != null) {
-                            ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.PENDING, "超时回收，重新处理");
-                        }
-                        stream.ack(group, id);
-                        // 重新发到队列
-                        stream.addAll(java.util.Map.of(
-                                "taskId", body.get("taskId"),
-                                "ragTag", body.get("ragTag"),
-                                "filePath", body.get("filePath")
-                        ));
-                    }
+                if (pending == null || pending.isEmpty()) {
+                    continue;
                 }
+
+                log.info("回收超时消息, 数量: {}", pending.size());
+
+                for (Map.Entry<StreamMessageId, Map<String, String>> entry : pending.entrySet()) {
+                    StreamMessageId id = entry.getKey();
+                    Map<String, String> body =  entry.getValue();
+                    String taskId = body.get("taskId");
+
+                    // 重置任务状态为 PENDING，重新入队
+                    if (taskId != null) {
+                        ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.PENDING, "超时回收，重新处理");
+                    }
+
+                    stream.ack(group, id);  // 从原 PEL 移除
+                    stream.addAll(body);    // 重新入队
+                }
+
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -158,125 +273,13 @@ public class DocumentIngestConsumer {
     }
 
     /**
-     * 带重试机制的消息处理
+     * 停止消费者
      */
-    private void processMessageWithRetry(Map<String, String> body, RStream<String, String> stream, String group, StreamMessageId id) {
-        String taskId = body.get("taskId");
-
-        // 1. 幂等检查：任务是否已处理过
-        IngestTask existingTask = ingestTaskRepository.findById(taskId);
-        if (existingTask != null && existingTask.getStatus() == IngestTask.TaskStatus.COMPLETED) {
-            log.info("任务已处理过，跳过, taskId: {}", taskId);
-            stream.ack(group, id);
-            return;
-        }
-
-        // 2. 标记为处理中
-        ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.PROCESSING, null);
-
-        try {
-            // 3. 处理消息
-            processDocument(body);
-
-            // 4. 先 Ack 确认
-            stream.ack(group, id);
-
-            // 5. 再删文件（文件删除不影响任务状态）
-            String filePath = body.get("filePath");
-            if (filePath != null) {
-                Files.deleteIfExists(Paths.get(filePath));
-            }
-
-            // 6. 最后标记完成
-            ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.COMPLETED, null);
-
-            log.info("摄入任务完成, taskId: {}", taskId);
-        } catch (Exception e) {
-            log.error("摄入任务失败, taskId: {}", taskId, e);
-            handleFailure(taskId, body, stream, group, id, e);
-        }
-    }
-
-    /**
-     * 处理失败：自动重试或标记失败
-     */
-    private void handleFailure(String taskId, Map<String, String> body, RStream<String, String> stream, String group, StreamMessageId id, Exception e) {
-        // 获取当前重试次数
-        int retryCount = getRetryCount(taskId);
-
-        if (retryCount < MAX_RETRY_COUNT) {
-            // 重试次数未达上限，重新放回队列
-            log.warn("任务处理失败，准备重试, taskId: {}, 当前重试次数: {}/{}", taskId, retryCount + 1, MAX_RETRY_COUNT);
-            // 重新入队，等待下次消费
-            stream.addAll(java.util.Map.of(
-                    "taskId", taskId,
-                    "ragTag", body.get("ragTag"),
-                    "filePath", body.get("filePath"),
-                    "retryCount", String.valueOf(retryCount + 1)
-            ));
-        } else {
-            // 超过重试次数，标记失败
-            log.error("任务处理失败，已达最大重试次数, taskId: {}, 重试次数: {}", taskId, MAX_RETRY_COUNT);
-            ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.FAILED, safeMessage(e));
-        }
-    }
-
-    /**
-     * 获取任务已重试次数
-     */
-    private int getRetryCount(String taskId) {
-        try {
-            IngestTask task = ingestTaskRepository.findById(taskId);
-            if (task != null && task.getErrorMessage() != null) {
-                // 从错误信息中解析重试次数
-                String msg = task.getErrorMessage();
-                if (msg.contains("重试次数:")) {
-                    String countStr = msg.substring(msg.indexOf("重试次数:") + 5, msg.indexOf("/"));
-                    return Integer.parseInt(countStr.trim());
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return 0;
-    }
-
-    /**
-     * 文档处理逻辑
-     */
-    private void processDocument(Map<String, String> body) {
-        String taskId = body.get("taskId");
-        String ragTag = body.get("ragTag");
-        String filePath = body.get("filePath");
-
-        log.info("开始处理摄入任务, taskId: {}, ragTag: {}", taskId, ragTag);
-
-        // 调用 ETL 流水线：Extract → Transform → Load
-        documentETLService.etlPipeline(filePath, ragTag);
-    }
-
-    private String safeMessage(Exception e) {
-        String message = e.getMessage();
-        if (message == null) return e.getClass().getName();
-        if (message.length() <= 2000) return message;
-        return message.substring(0, 2000);
-    }
-
-    private void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException ignored) {
-        }
-    }
-
     @PreDestroy
     public void stop() {
         running.set(false);
-        if (workerThread != null) {
-            workerThread.interrupt();
-        }
-        if (pendingClaimThread != null) {
-            pendingClaimThread.interrupt();
-        }
+        if (workerThread != null) workerThread.interrupt();
+        if (pendingClaimThread != null) pendingClaimThread.interrupt();
+        if (fileDeleteExecutor != null) fileDeleteExecutor.shutdownNow();
     }
-
 }

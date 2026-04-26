@@ -31,7 +31,6 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
                 .map(p -> ParagraphChunk.builder()
                         .content(p.getContent())
                         .sourceDoc(p.getSourceDoc())
-                        .paragraphIndex(p.getParagraphIndex())
                         .pageNumber(1)
                         .charCount(p.getCharCount())
                         .build())
@@ -40,14 +39,11 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
         log.info("预分段转换完成, 段落数: {}", chunks.size());
 
         List<Document> finalChunks = new ArrayList<>();
-        int globalIndex = 0;
 
         for (ParagraphChunk paragraph : chunks) {
             Document doc = new Document(paragraph.getContent());
             doc.getMetadata().put("knowledge", ragTag);
             doc.getMetadata().put("sourceDoc", paragraph.getSourceDoc());
-            doc.getMetadata().put("paragraphIndex", paragraph.getParagraphIndex());
-            doc.getMetadata().put("pageNumber", paragraph.getPageNumber());
             doc.getMetadata().put("type", "knowledge");
 
             TokenTextSplitter splitter = createTokenTextSplitter();
@@ -56,10 +52,7 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
             for (Document chunk : tokenChunks) {
                 chunk.getMetadata().put("knowledge", ragTag);
                 chunk.getMetadata().put("sourceDoc", paragraph.getSourceDoc());
-                chunk.getMetadata().put("parentParagraphIndex", paragraph.getParagraphIndex());
-                chunk.getMetadata().put("pageNumber", paragraph.getPageNumber());
                 chunk.getMetadata().put("type", "knowledge");
-                chunk.getMetadata().put("chunkIndex", globalIndex++);
                 finalChunks.add(chunk);
             }
         }
@@ -74,7 +67,7 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
         return new TokenTextSplitter(
                 config.getMaxTokens(),
                 config.getMinChunkLengthToEmbed(),
-                0,
+                config.getOverlapTokens(),
                 config.getMinTokens(),
                 config.isKeepSeparator()
         );
@@ -87,7 +80,6 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
     public static class ParagraphChunk {
         private String content;
         private String sourceDoc;
-        private int paragraphIndex;
         private int pageNumber;
         private int charCount;
     }

@@ -111,10 +111,56 @@ public interface IVectorStoreRepository {
     List<QueryKnowledgeResponse.KnowledgeDoc> queryKnowledgeDocs(String ragTag, int topK);
 
     /**
+     * 查询知识库文档（语义检索，带分数排序）
+     * @param ragTag 知识库标签
+     * @param query 查询文本
+     * @param topK 查询数量
+     * @return 按相关度排序的知识文档列表
+     */
+    List<QueryKnowledgeResponse.KnowledgeDoc> queryKnowledgeDocsWithScore(String ragTag, String query, int topK);
+
+    /**
      * 删除知识库文档
      * @param ragTag 知识库标签
      * @param docId 文档ID
      */
     void deleteKnowledgeDoc(String ragTag, String docId);
+
+    /**
+     * 根据docId删除所有相关chunk（更新时使用）
+     * 先删后增策略：更新文档前精确删除旧chunk
+     *
+     * @param ragTag 知识库标签
+     * @param docId 文档ID
+     */
+    void deleteByDocId(String ragTag, String docId);
+
+    /**
+     * 查询某docId的所有chunk IDs
+     * 用于更新前获取需要删除的旧chunk IDs
+     *
+     * @param ragTag 知识库标签
+     * @param docId 文档ID
+     * @return chunk ID列表
+     */
+    List<Long> findChunkIdsByDocId(String ragTag, String docId);
+
+    /**
+     * 根据sourceDoc删除所有相关chunk
+     * 用于批量删除同一来源文档的所有chunk
+     *
+     * @param ragTag 知识库标签
+     * @param sourceDoc 文档来源文件名
+     */
+    void deleteBySourceDoc(String ragTag, String sourceDoc);
+
+    /**
+     * 查询某sourceDoc的所有chunk IDs
+     *
+     * @param ragTag 知识库标签
+     * @param sourceDoc 文档来源文件名
+     * @return chunk ID列表
+     */
+    List<Long> findChunkIdsBySourceDoc(String ragTag, String sourceDoc);
 
 }

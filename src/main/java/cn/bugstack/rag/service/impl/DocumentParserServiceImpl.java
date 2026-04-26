@@ -1,5 +1,8 @@
 package cn.bugstack.rag.service.impl;
 
+import cn.bugstack.rag.service.DocumentParserService;
+import cn.bugstack.rag.service.TableParserService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
@@ -20,13 +23,17 @@ import java.util.List;
 /**
  * 多格式文档解析服务实现
  * 支持 PDF、Word、Excel、PPT、TXT、Markdown、HTML、JSON 等多种格式
+ * 增强：支持PDF表格提取
  */
 @Slf4j
 @Service
-public class DocumentParserServiceImpl implements cn.bugstack.rag.service.DocumentParserService {
+public class DocumentParserServiceImpl implements DocumentParserService {
 
     private final Tika tika = new Tika();
     private final AutoDetectParser parser = new AutoDetectParser();
+
+    @Resource
+    private TableParserService tableParserService;
 
     @Override
     public String parseDocument(Path filePath) {
@@ -86,10 +93,34 @@ public class DocumentParserServiceImpl implements cn.bugstack.rag.service.Docume
 
             List<Paragraph> paragraphs = splitIntoParagraphs(content, fileName);
 
+            // 如果是PDF文件，额外提取表格
+            List<TableParserService.Table> tables = new ArrayList<>();
+            String contentType = metadata.get(org.apache.tika.metadata.Metadata.CONTENT_TYPE);
+            if (contentType != null && contentType.contains("pdf")) {
+                try {
+                    tables = tableParserService.extractTables(bytes);
+                    log.info("从PDF提取到 {} 个表格", tables.size());
+
+                    // 将表格内容追加到段落中（转为Markdown格式）
+                    for (TableParserService.Table table : tables) {
+                        String markdownTable = tableParserService.tableToMarkdown(table);
+                        paragraphs.add(Paragraph.builder()
+                                .content("[表格-第" + table.getPageNumber() + "页-表" + (table.getTableIndex() + 1) + "]\n" + markdownTable)
+                                .sourceDoc(fileName)
+                                .paragraphIndex(paragraphs.size())
+                                .charCount(markdownTable.length())
+                                .build());
+                    }
+                } catch (Exception e) {
+                    log.warn("PDF表格提取失败, 文件: {}, 错误: {}", fileName, e.getMessage());
+                }
+            }
+
             return ParseResult.builder()
                     .content(content)
                     .metadata(docMeta)
                     .paragraphs(paragraphs)
+                    .tables(tables)
                     .build();
         } catch (IOException | SAXException | TikaException e) {
             log.error("文档解析失败: {}", fileName, e);
