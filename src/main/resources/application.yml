@@ -1,0 +1,81 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: ai-rag-knowledge
+
+  ai:
+    # MiniMax 云端API (兼容OpenAI格式)
+    minimax:
+      base-url: https://api.minimax.chat
+      api-key: ${MINIMAX_API_KEY}
+      model: MiniMax-M2.7
+
+    # OpenAI兼容配置 (指向MiniMax)
+    openai:
+      base-url: https://api.minimax.chat
+      api-key: ${MINIMAX_API_KEY}
+      chat:
+        options:
+          model: MiniMax-M2.7
+
+    # Jina Rerank配置
+    jina:
+      api-key: ${JINA_API_KEY}
+      model: jina-reranker-v1-base-en
+
+    # RAG配置
+    rag:
+      embed: nomic-embed-text
+      max-cases: 10
+      splitter:
+        max-tokens: 1000
+        min-tokens: 50
+        min-chunk-length-to-embed: 5
+        merge-chunk-length: 200
+        keep-separator: true
+        overlap-tokens: 200
+        batch-size: 200
+      stream:
+        stream-key: rag:ingest:stream
+        group: rag-ingest-group
+        consumer: rag-ingest-consumer
+
+    # Embedding模型配置（支持切换）
+    embedding:
+      # 模型类型：bge / minimax / nomic
+      provider: bge
+      # 向量维度（BAAI/bge-large-zh-v1.5 通常是 1024）
+      dimensions: 1024
+      # BGE模型（使用 SiliconFlow 托管的兼容API）
+      bge:
+        base-url: https://api.siliconflow.cn/v1
+        api-key: ${SILICONFLOW_API_KEY}
+        model: BAAI/bge-large-zh-v1.5
+
+    # 向量存储配置
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+
+  datasource:
+    url: jdbc:postgresql://49.232.146.225:15432/ai-rag-knowledge
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+
+  sql:
+    init:
+      mode: always
+
+logging:
+  level:
+    root: INFO
+    cn.bugstack.rag: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

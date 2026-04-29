@@ -36,3 +36,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+/.idea/
+/data/
+/xfg-dev-tech-app/data/
+/xfg-dev-tech-app/cloned-repo/
