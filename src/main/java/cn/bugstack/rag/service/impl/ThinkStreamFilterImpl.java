@@ -2,11 +2,13 @@ package cn.bugstack.rag.service.impl;
 
 import cn.bugstack.rag.service.ThinkStreamFilter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
  * 思考内容过滤器实现 - 用于移除AI思考过程
  */
 @Slf4j
+@Service
 public class ThinkStreamFilterImpl implements ThinkStreamFilter {
 
     @Override

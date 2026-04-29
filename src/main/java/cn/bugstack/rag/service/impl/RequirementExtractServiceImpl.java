@@ -1,6 +1,7 @@
 package cn.bugstack.rag.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.regex.Pattern;
  * 需求提炼服务实现
  */
 @Slf4j
+@Service
 public class RequirementExtractServiceImpl implements cn.bugstack.rag.service.RequirementExtractService {
 
     // 新格式：匹配 "[维度]：[模块] - [操作] → [预期结果]"
@@ -29,7 +31,7 @@ public class RequirementExtractServiceImpl implements cn.bugstack.rag.service.Re
 
                 ## 任务
                 对【需求内容】进行多维度分析，输出可检索的测试场景描述。
-
+                
                 ## ⚠️ 核心约束（严格遵守）
 
                 ### H1: 禁止推理扩展原则

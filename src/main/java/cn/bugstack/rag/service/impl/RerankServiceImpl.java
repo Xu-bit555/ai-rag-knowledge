@@ -15,6 +15,7 @@ import java.util.*;
  * 重排序服务实现
  */
 @Slf4j
+@Service
 public class RerankServiceImpl implements cn.bugstack.rag.service.RerankService {
 
     private static final String JINA_RERANK_URL = "https://api.jina.ai/v1/rerank";

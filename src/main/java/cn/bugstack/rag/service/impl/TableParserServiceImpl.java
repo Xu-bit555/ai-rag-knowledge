@@ -2,9 +2,12 @@ package cn.bugstack.rag.service.impl;
 
 import cn.bugstack.rag.service.TableParserService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.stereotype.Service;
-import technology.tabula.CommandLineExtractor;
-import technology.tabula.Table as TabulaTable;
+import technology.tabula.ObjectExtractor;
+import technology.tabula.Page;
+import technology.tabula.RectangularTextContainer;
+import technology.tabula.Table;
 import technology.tabula.extractors.BasicExtractionAlgorithm;
 
 import java.io.ByteArrayInputStream;
@@ -24,23 +27,23 @@ public class TableParserServiceImpl implements TableParserService {
     public List<Table> extractTables(byte[] pdfBytes) {
         List<Table> tables = new ArrayList<>();
 
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(pdfBytes)) {
-            CommandLineExtractor extractor = new CommandLineExtractor();
-            extractor.setInput(bis);
-
-            // 使用BasicExtractionAlgorithm提取表格
+        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(pdfBytes))) {
+            ObjectExtractor extractor = new ObjectExtractor(document);
             BasicExtractionAlgorithm algorithm = new BasicExtractionAlgorithm();
-            List<technology.tabula.Table> tabulaTables = extractor.extract(algorithm);
 
             int globalIndex = 0;
-            for (int pageNum = 0; pageNum < tabulaTables.size(); pageNum++) {
-                technology.tabula.Table tabulaTable = tabulaTables.get(pageNum);
-                List<List<String>> rows = convertTabulaTable(tabulaTable);
-
-                if (!rows.isEmpty()) {
-                    Table table = new Table(pageNum + 1, globalIndex++, rows);
-                    tables.add(table);
+            int pageNum = 1;
+            Page page;
+            while ((page = extractor.extract(pageNum)) != null) {
+                List<technology.tabula.Table> pageTables = algorithm.extract(page);
+                for (technology.tabula.Table tabulaTable : pageTables) {
+                    List<List<String>> rows = convertTabulaTable(tabulaTable);
+                    if (!rows.isEmpty()) {
+                        Table table = new Table(pageNum, globalIndex++, rows);
+                        tables.add(table);
+                    }
                 }
+                pageNum++;
             }
 
             log.info("从PDF中提取到 {} 个表格", tables.size());
@@ -56,22 +59,20 @@ public class TableParserServiceImpl implements TableParserService {
     public List<Table> extractTablesFromPage(byte[] pdfBytes, int page) {
         List<Table> tables = new ArrayList<>();
 
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(pdfBytes)) {
-            CommandLineExtractor extractor = new CommandLineExtractor();
-            extractor.setInput(bis);
+        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(pdfBytes))) {
+            ObjectExtractor extractor = new ObjectExtractor(document);
+            BasicExtractionAlgorithm algorithm = new BasicExtractionAlgorithm();
 
-            // 只提取指定页面
-            int[] pages = {page};
-            List<technology.tabula.Table> tabulaTables = extractor.extract(pages);
-
-            int globalIndex = 0;
-            for (int pageNum = 0; pageNum < tabulaTables.size(); pageNum++) {
-                technology.tabula.Table tabulaTable = tabulaTables.get(pageNum);
-                List<List<String>> rows = convertTabulaTable(tabulaTable);
-
-                if (!rows.isEmpty()) {
-                    Table table = new Table(page, globalIndex++, rows);
-                    tables.add(table);
+            Page pdfPage = extractor.extract(page);
+            if (pdfPage != null) {
+                List<technology.tabula.Table> pageTables = algorithm.extract(pdfPage);
+                int globalIndex = 0;
+                for (technology.tabula.Table tabulaTable : pageTables) {
+                    List<List<String>> rows = convertTabulaTable(tabulaTable);
+                    if (!rows.isEmpty()) {
+                        Table table = new Table(page, globalIndex++, rows);
+                        tables.add(table);
+                    }
                 }
             }
 
@@ -90,7 +91,7 @@ public class TableParserServiceImpl implements TableParserService {
     }
 
     /**
-     * 将Tabula表格转换为List<List<String>>
+     * 将Tabula表格(RectangularTextContainer)转换为List<List<String>>
      */
     private List<List<String>> convertTabulaTable(technology.tabula.Table tabulaTable) {
         List<List<String>> rows = new ArrayList<>();
@@ -99,20 +100,13 @@ public class TableParserServiceImpl implements TableParserService {
             return rows;
         }
 
-        for (int i = 0; i < tabulaTable.getRows().size(); i++) {
-            technology.tabula.Rectangle cell;
+        for (List<RectangularTextContainer> tabulaRow : tabulaTable.getRows()) {
             List<String> row = new ArrayList<>();
-
-            for (int j = 0; j < tabulaTable.getColumns(); j++) {
-                try {
-                    cell = tabulaTable.getCell(i, j);
-                    String text = cell != null ? cell.getText() : "";
-                    // 清理文本：去除多余空白，保留换行
-                    text = text.replaceAll("\\s+", " ").trim();
-                    row.add(text);
-                } catch (Exception e) {
-                    row.add("");
-                }
+            for (RectangularTextContainer cell : tabulaRow) {
+                String text = cell != null ? cell.getText() : "";
+                // 清理文本：去除多余空白，保留换行
+                text = text.replaceAll("\\s+", " ").trim();
+                row.add(text);
             }
 
             // 跳过空行

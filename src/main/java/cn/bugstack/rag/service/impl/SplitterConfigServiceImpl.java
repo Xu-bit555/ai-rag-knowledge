@@ -2,11 +2,13 @@ package cn.bugstack.rag.service.impl;
 
 import cn.bugstack.rag.config.TextSplitterConfigProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
  * 切分配置服务实现
  */
 @Slf4j
+@Service
 public class SplitterConfigServiceImpl implements cn.bugstack.rag.service.SplitterConfigService {
 
     private final TextSplitterConfigProperties properties;

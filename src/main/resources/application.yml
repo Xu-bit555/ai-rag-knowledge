@@ -9,20 +9,20 @@ spring:
     # MiniMax 云端API (兼容OpenAI格式)
     minimax:
       base-url: https://api.minimax.chat
-      api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
+      api-key: ${MINIMAX_API_KEY}
       model: MiniMax-M2.7
 
     # OpenAI兼容配置 (指向MiniMax)
     openai:
       base-url: https://api.minimax.chat
-      api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
+      api-key: ${MINIMAX_API_KEY}
       chat:
         options:
           model: MiniMax-M2.7
 
     # Jina Rerank配置
     jina:
-      api-key: jina_5a1019fb5ac3466fbce1954125dfd8f3YXADROBzobucbqsZHBbzF1cEQHZX
+      api-key: ${JINA_API_KEY}
       model: jina-reranker-v1-base-en
 
     # RAG配置
@@ -46,18 +46,13 @@ spring:
     embedding:
       # 模型类型：bge / minimax / nomic
       provider: bge
-      # 向量维度（BGE-large-zh 通常是 1024）
+      # 向量维度（BAAI/bge-large-zh-v1.5 通常是 1024）
       dimensions: 1024
-      # BGE模型（内部部署的OpenAI兼容API）
+      # BGE模型（使用 SiliconFlow 托管的兼容API）
       bge:
-        base-url: http://your-bge-service.internal.com
-        api-key: your-bge-api-key
-        model: bge-large-zh
-      # MiniMax Embedding
-      minimax:
-        base-url: https://api.minimax.chat
-        api-key: sk-cp-I1-sULgmJpEcM7r_MUCUxpg-9qUDDx5oIUpO1KX-b7hfrWUsZErvyD_0de0wfEzBoGf-7BOwPmwg1D8rc3i21MdLSoKX1qvMeBIuItRYgHfU-Heu0_5Ep0k
-        model: embo-01
+        base-url: https://api.siliconflow.cn/v1
+        api-key: ${SILICONFLOW_API_KEY}
+        model: BAAI/bge-large-zh-v1.5
 
     # 向量存储配置
     vectorstore:

@@ -50,10 +50,33 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
             Document doc = new Document(testCaseJson);
             doc.getMetadata().put("knowledge", ragTag);
             doc.getMetadata().put("type", "test_case");
-            doc.getMetadata().put("adoptionStatus", "PENDING");
+            // 从 content JSON 中读取 adoptionStatus，默认为 PENDING
+            String adoptionStatus = extractAdoptionStatus(testCaseJson);
+            doc.getMetadata().put("adoptionStatus", adoptionStatus);
+            // 同时把 caseId 提取出来方便后续 SQL 更新
+            String caseId = extractCaseId(testCaseJson);
+            doc.getMetadata().put("caseId", caseId);
             vectorStore.accept(List.of(doc));
         }
         log.info("测试用例保存完成, ragTag: {}", ragTag);
+    }
+
+    private String extractAdoptionStatus(String testCaseJson) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(testCaseJson);
+            return node.has("adoptionStatus") ? node.get("adoptionStatus").asText() : "PENDING";
+        } catch (Exception e) {
+            return "PENDING";
+        }
+    }
+
+    private String extractCaseId(String testCaseJson) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(testCaseJson);
+            return node.has("caseId") ? node.get("caseId").asText() : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -78,19 +101,17 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public void updateTestCaseStatus(String ragTag, String caseId, String status, String reason) {
         log.info("更新测试用例状态, ragTag: {}, caseId: {}, status: {}", ragTag, caseId, status);
 
-        String caseIdPattern = "%\"id\":\"" + caseId + "\"%";
-
         String sql;
         if (reason != null && !reason.isEmpty()) {
             sql = "UPDATE spring_ai_vectors " +
                   "SET metadata = jsonb_set(jsonb_set(metadata, '{adoptionStatus}', to_jsonb(?)), '{rejectReason}', to_jsonb(?)) " +
-                  "WHERE metadata->>'knowledge' = ? AND metadata->>'type' = 'test_case' AND content LIKE ?";
-            jdbcTemplate.update(sql, status, reason, ragTag, caseIdPattern);
+                  "WHERE metadata->>'knowledge' = ? AND metadata->>'type' = 'test_case' AND metadata->>'caseId' = ?";
+            jdbcTemplate.update(sql, status, reason, ragTag, caseId);
         } else {
             sql = "UPDATE spring_ai_vectors " +
                   "SET metadata = jsonb_set(metadata, '{adoptionStatus}', to_jsonb(?)) " +
-                  "WHERE metadata->>'knowledge' = ? AND metadata->>'type' = 'test_case' AND content LIKE ?";
-            jdbcTemplate.update(sql, status, ragTag, caseIdPattern);
+                  "WHERE metadata->>'knowledge' = ? AND metadata->>'type' = 'test_case' AND metadata->>'caseId' = ?";
+            jdbcTemplate.update(sql, status, ragTag, caseId);
         }
     }
 
@@ -388,6 +409,12 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     }
 
     @Override
+    public void deleteKnowledgeDoc(String ragTag, String docId) {
+        log.info("删除知识库文档, ragTag: {}, docId: {}", ragTag, docId);
+        deleteByDocId(ragTag, docId);
+    }
+
+    @Override
     public List<Long> findChunkIdsByDocId(String ragTag, String docId) {
         log.debug("查询docId对应的chunkIds, ragTag: {}, docId: {}", ragTag, docId);
 
@@ -397,7 +424,33 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
               AND metadata->>'docId' = ?
             """;
 
-        return jdbcTemplate.queryForList(sql, Long.class, ragTag, docId);
+return jdbcTemplate.queryForList(sql, Long.class, ragTag, docId);
     }
 
+    @Override
+    public List<Long> findChunkIdsBySourceDoc(String ragTag, String sourceDoc) {
+        log.debug("查询sourceDoc对应的chunkIds, ragTag: {}, sourceDoc: {}", ragTag, sourceDoc);
+
+        String sql = """
+            SELECT id FROM spring_ai_vectors
+            WHERE metadata->>'knowledge' = ?
+              AND metadata->>'sourceDoc' = ?
+            """;
+
+return jdbcTemplate.queryForList(sql, Long.class, ragTag, sourceDoc);
+    }
+
+    @Override
+    public void deleteBySourceDoc(String ragTag, String sourceDoc) {
+        log.info("根据sourceDoc删除所有相关chunk, ragTag: {}, sourceDoc: {}", ragTag, sourceDoc);
+
+        String sql = """
+            DELETE FROM spring_ai_vectors
+            WHERE metadata->>'knowledge' = ?
+              AND metadata->>'sourceDoc' = ?
+            """;
+
+        int deleted = jdbcTemplate.update(sql, ragTag, sourceDoc);
+        log.info("根据sourceDoc删除chunk完成, ragTag: {}, sourceDoc: {}, 删除数量: {}", ragTag, sourceDoc, deleted);
+    }
 }

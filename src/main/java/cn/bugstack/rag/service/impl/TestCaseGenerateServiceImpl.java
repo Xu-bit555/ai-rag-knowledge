@@ -2,6 +2,7 @@ package cn.bugstack.rag.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -9,6 +10,7 @@ import java.util.List;
  * 测试用例生成服务实现
  */
 @Slf4j
+@Service
 public class TestCaseGenerateServiceImpl implements cn.bugstack.rag.service.TestCaseGenerateService {
 
     @Value("${spring.ai.rag.max-cases:10}")

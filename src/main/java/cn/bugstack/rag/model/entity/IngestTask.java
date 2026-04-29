@@ -40,9 +40,9 @@ public class IngestTask implements Serializable {
     private String errorMessage;
 
     /**
-     * 文件路径
+     * 文件路径/文件名（用于解析时判断文件类型）
      */
-    private String filePath;
+    private String fileName;
 
     /**
      * 创建时间
@@ -67,12 +67,12 @@ public class IngestTask implements Serializable {
     /**
      * 创建待处理任务
      */
-    public static IngestTask createPending(String taskId, String ragTag, String filePath) {
+    public static IngestTask createPending(String taskId, String ragTag, String fileName) {
         return IngestTask.builder()
                 .taskId(taskId)
                 .ragTag(ragTag)
                 .status(TaskStatus.PENDING)
-                .filePath(filePath)
+                .fileName(fileName)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();

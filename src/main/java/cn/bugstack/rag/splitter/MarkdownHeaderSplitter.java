@@ -59,6 +59,7 @@ public class MarkdownHeaderSplitter {
      * Markdown文本结构节点
      */
     @Data
+    @Builder
     public static class MarkdownNode {
         /**
          * 标题级别1-6，0表示正文

@@ -54,7 +54,7 @@ public class IngestTaskRepositoryImpl implements IIngestTaskRepository {
                 insert into rag_ingest_task (task_id, rag_tag, status, file_path)
                 values (?, ?, ?, ?)
                 """, task.getTaskId(), task.getRagTag(),
-                task.getStatus().name(), task.getFilePath());
+                task.getStatus().name(), task.getFileName());
     }
 
     @Override
@@ -77,7 +77,7 @@ public class IngestTaskRepositoryImpl implements IIngestTaskRepository {
                             .taskId(rs.getString("task_id"))
                             .ragTag(rs.getString("rag_tag"))
                             .status(IngestTask.TaskStatus.valueOf(rs.getString("status")))
-                            .filePath(rs.getString("file_path"))
+                            .fileName(rs.getString("file_path"))
                             .errorMessage(rs.getString("error_message"))
                             .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
                             .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())

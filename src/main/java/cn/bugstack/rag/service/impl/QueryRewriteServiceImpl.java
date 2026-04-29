@@ -8,7 +8,6 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -165,19 +164,18 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                     """, userQuery);
 
             StringBuilder answer = new StringBuilder();
-            chatClient.stream(new Prompt(prompt, OpenAiChatOptions.builder()
+            OpenAiChatOptions options = OpenAiChatOptions.builder()
                     .withModel(defaultModel)
-                    .withMaxTokens(100)
-                    .build()))
+                    .build();
+
+            chatClient.stream(new Prompt(prompt, options))
                     .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null) {
-                            String content = chunk.getResult().getOutput().getContent();
-                            if (content != null) {
-                                answer.append(content);
-                            }
+                        if (chunk != null && chunk.getResult() != null
+                                && chunk.getResult().getOutput() != null
+                                && chunk.getResult().getOutput().getContent() != null) {
+                            answer.append(chunk.getResult().getOutput().getContent());
                         }
-                    })
-                    .dispose();
+                    });
 
             // 等待生成完成
             Thread.sleep(1500);
@@ -249,19 +247,18 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
 
         try {
             StringBuilder response = new StringBuilder();
-            chatClient.stream(new Prompt(prompt, OpenAiChatOptions.builder()
+            OpenAiChatOptions options = OpenAiChatOptions.builder()
                     .withModel(defaultModel)
-                    .withMaxTokens(200)
-                    .build()))
+                    .build();
+
+            chatClient.stream(new Prompt(prompt, options))
                     .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null) {
-                            String content = chunk.getResult().getOutput().getContent();
-                            if (content != null) {
-                                response.append(content);
-                            }
+                        if (chunk != null && chunk.getResult() != null
+                                && chunk.getResult().getOutput() != null
+                                && chunk.getResult().getOutput().getContent() != null) {
+                            response.append(chunk.getResult().getOutput().getContent());
                         }
-                    })
-                    .dispose();
+                    });
 
             Thread.sleep(1000);
 
@@ -293,19 +290,18 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                     """, prdQuery);
 
             StringBuilder keywords = new StringBuilder();
-            chatClient.stream(new Prompt(prompt, OpenAiChatOptions.builder()
+            OpenAiChatOptions options = OpenAiChatOptions.builder()
                     .withModel(defaultModel)
-                    .withMaxTokens(50)
-                    .build()))
+                    .build();
+
+            chatClient.stream(new Prompt(prompt, options))
                     .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null) {
-                            String content = chunk.getResult().getOutput().getContent();
-                            if (content != null) {
-                                keywords.append(content);
-                            }
+                        if (chunk != null && chunk.getResult() != null
+                                && chunk.getResult().getOutput() != null
+                                && chunk.getResult().getOutput().getContent() != null) {
+                            keywords.append(chunk.getResult().getOutput().getContent());
                         }
-                    })
-                    .dispose();
+                    });
 
             Thread.sleep(1000);
 

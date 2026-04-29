@@ -25,6 +25,11 @@
 
     <repositories>
         <repository>
+            <id>maven-central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
+        <repository>
             <id>spring-milestones</id>
             <name>Spring Milestones</name>
             <url>https://repo.spring.io/milestone</url>
@@ -122,7 +127,7 @@
         <!-- Tabula-Java - PDF表格提取 -->
         <dependency>
             <groupId>technology.tabula</groupId>
-            <artifactId>tabula-java</artifactId>
+            <artifactId>tabula</artifactId>
             <version>1.0.5</version>
         </dependency>
 

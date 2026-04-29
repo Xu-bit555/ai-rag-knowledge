@@ -53,5 +53,15 @@ public class QueryKnowledgeResponse {
          * 来源文档名
          */
         private String sourceDoc;
+
+        /**
+         * 文档ID（用于去重）
+         */
+        private String docId;
+
+        /**
+         * 相似度分数
+         */
+        private Double score;
     }
 }
