@@ -29,7 +29,7 @@ public class AdoptCasesTool {
 
     private final AdoptCasesUseCase adoptCasesUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_ADOPT_CASES,
+    @Tool(name = "onecase_adopt_cases",
             description = "Persist generated Canonical DSL test cases as 'Adopted Test Assets' in the "
                     + "rag_test_case table. Accepts a complete CanonicalTestCaseDSL object (must contain "
                     + "schemaVersion=1.0.0, summary, and cases[]). Each case is assigned a stable caseId "

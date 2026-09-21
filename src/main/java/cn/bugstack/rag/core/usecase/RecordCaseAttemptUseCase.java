@@ -74,9 +74,16 @@ public class RecordCaseAttemptUseCase {
         int blocked = counts[2];
         int latestCasesCount = passed + failed + blocked;
 
-        // 判断: 如果所有 totalCases 都有最终 outcome
+        // Phase 2 R4: 状态机推进逻辑
+        // - 所有 case 都最终 outcome → COMPLETED 或 FAILED
+        // - 否则保持 RUNNING
         if (latestCasesCount >= run.getTotalCases()) {
-            newStatus = TestRunStatus.COMPLETED;
+            if (failed + blocked == run.getTotalCases()) {
+                // 所有 case 都 FAILED 或 BLOCKED → FAILED 终态
+                newStatus = TestRunStatus.FAILED;
+            } else {
+                newStatus = TestRunStatus.COMPLETED;
+            }
         }
 
         String overall = computeOverall(passed, failed, blocked);

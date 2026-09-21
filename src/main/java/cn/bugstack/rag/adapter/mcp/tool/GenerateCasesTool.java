@@ -24,7 +24,7 @@ public class GenerateCasesTool {
 
     private final GenerateCasesUseCase generateCasesUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_GENERATE_CASES,
+    @Tool(name = "onecase_generate_cases",
             description = "Generate Canonical DSL test cases from a requirement using OneCase's "
                     + "RAG-augmented generator. Returns a CanonicalTestCaseDSL object (schemaVersion=1.0.0) "
                     + "with a summary and an array of TestCase entities (each with typed assertions, "

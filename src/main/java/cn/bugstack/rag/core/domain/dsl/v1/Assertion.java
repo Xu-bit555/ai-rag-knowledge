@@ -35,7 +35,8 @@ public class Assertion {
     @JsonProperty("expected")
     private String expected;
 
-    /** 反向断言 (默认 false) */
+    /** 反向断言 (默认 false, Phase 2 L1: Boolean → boolean + @Builder.Default) */
+    @Builder.Default
     @JsonProperty("negate")
-    private Boolean negate;
+    private boolean negate = false;
 }

@@ -1,6 +1,5 @@
 package cn.bugstack.rag.adapter.mcp.tool;
 
-import cn.bugstack.rag.adapter.mcp.McpToolConfig;
 import cn.bugstack.rag.core.domain.dsl.v1.DslValidator;
 import cn.bugstack.rag.core.domain.dsl.v1.DslValidator.ValidationResult;
 import cn.bugstack.rag.core.domain.dsl.v1.TestCaseEntity;
@@ -27,7 +26,7 @@ public class ValidateCaseTool {
 
     private final DslValidator dslValidator;
 
-    @Tool(name = McpToolConfig.TOOL_VALIDATE_CASE,
+    @Tool(name = "onecase_validate_case",
             description = "Validate a TestCaseEntity against Canonical DSL v1.0.0 schema and business "
                     + "semantics. Returns {valid, errors[]}. Use this before calling onecase_adopt_cases "
                     + "to fail fast on invalid DSL. The case object must include automationCandidate field "

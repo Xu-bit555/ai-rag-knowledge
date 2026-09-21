@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onecase.dev/schemas/canonical-test-case/v1.0.json",
+  "$ref": "v1.json"
+}

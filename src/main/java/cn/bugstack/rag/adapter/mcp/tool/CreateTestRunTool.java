@@ -19,7 +19,7 @@ public class CreateTestRunTool {
 
     private final CreateTestRunUseCase createTestRunUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_CREATE_TEST_RUN,
+    @Tool(name = "onecase_create_test_run",
             description = "Create a TestRun from a list of adopted caseIds. Validates that all cases "
                     + "exist, are in ADOPTED status, and have automationCandidate=WEB_FUNCTIONAL. "
                     + "Returns {runId, status:CREATED, totalCases}. Use AFTER onecase_adopt_cases.")

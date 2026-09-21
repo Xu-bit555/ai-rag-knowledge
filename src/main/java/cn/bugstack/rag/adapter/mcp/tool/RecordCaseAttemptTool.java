@@ -18,7 +18,7 @@ public class RecordCaseAttemptTool {
 
     private final RecordCaseAttemptUseCase recordCaseAttemptUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_RECORD_CASE_ATTEMPT,
+    @Tool(name = "onecase_record_case_attempt",
             description = "Record one execution attempt for a case in a TestRun. Server computes "
                     + "attemptNumber automatically (MAX+1); Agent should NOT pass attemptNumber. "
                     + "Triggers TestRun status machine: first attempt → RUNNING, all cases have "

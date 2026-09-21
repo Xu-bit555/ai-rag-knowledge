@@ -2,6 +2,10 @@ package cn.bugstack.rag.service.impl;
 
 import cn.bugstack.rag.service.DocumentParserService;
 import cn.bugstack.rag.service.TableParserService;
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingRegistry;
+import com.knuddels.jtokkit.api.EncodingType;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
@@ -31,6 +35,13 @@ public class DocumentParserServiceImpl implements DocumentParserService {
 
     private final Tika tika = new Tika();
     private final AutoDetectParser parser = new AutoDetectParser();
+
+    /**
+     * Phase 2 R5: jtokkit BPE tokenizer. CL100K_BASE 是 GPT-3.5/4 同款编码,
+     *   对英文 BPE 准确, 中文需拆字符 (jtokkit 对 CJK 处理不算完美).
+     */
+    private static final EncodingRegistry ENCODING_REGISTRY = Encodings.newDefaultEncodingRegistry();
+    private static final Encoding ENCODING = ENCODING_REGISTRY.getEncoding(EncodingType.CL100K_BASE);
 
     @Resource
     private TableParserService tableParserService;
@@ -550,45 +561,29 @@ public class DocumentParserServiceImpl implements DocumentParserService {
     }
 
     /**
-     * 估算 token 数量（中文约 0.5 token/字符，英文约 1.25 token/词）
+     * Phase 2 R5: 用 jtokkit BPE tokenizer 估算 token 数 (替代中文 0.5 / 英文 1.25 启发式).
+     *
+     * 中文按 char 拆分 (jtokkit CL100K_BASE 对 CJK 会合并, 拆字符避免被 BPE 合并),
+     * 其余文本走 BPE 计数.
      */
     private int estimateTokenCount(String text) {
         if (text == null || text.isEmpty()) {
             return 0;
         }
-        // 中文字符和标点按 0.5 估算，英文单词按 1.25 估算
-        int chineseCount = 0;
-        int englishWordCount = 0;
-        boolean inEnglishWord = false;
-        StringBuilder currentWord = new StringBuilder();
-
-        for (char c : text.toCharArray()) {
-            if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
-                    Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS ||
-                    Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION) {
-                // 中文字符或中文标点
-                chineseCount++;
-                if (inEnglishWord && currentWord.length() > 0) {
-                    englishWordCount++;
-                    currentWord.setLength(0);
-                }
-                inEnglishWord = false;
-            } else if (Character.isLetter(c)) {
-                currentWord.append(c);
-                inEnglishWord = true;
+        // 1) 中文字符用空格隔开, 防止 BPE 合并相邻中文字
+        StringBuilder sb = new StringBuilder(text.length() + 16);
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                    || Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                    || Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION) {
+                sb.append(' ').append(c).append(' ');
             } else {
-                if (inEnglishWord && currentWord.length() > 0) {
-                    englishWordCount++;
-                    currentWord.setLength(0);
-                }
-                inEnglishWord = false;
+                sb.append(c);
             }
         }
-        if (inEnglishWord && currentWord.length() > 0) {
-            englishWordCount++;
-        }
-
-        return (int) Math.ceil(chineseCount * 0.5 + englishWordCount * 1.25);
+        return ENCODING.countTokens(sb.toString());
+    }
     }
 
     /**

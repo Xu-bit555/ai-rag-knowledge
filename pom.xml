@@ -121,6 +121,13 @@
             <version>3.25.2</version>
         </dependency>
 
+        <!-- Phase 2 R5: jtokkit - BPE tokenizer (更准确的 token 估算, 替代中文 0.5 / 英文 1.25 启发式) -->
+        <dependency>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
+            <version>0.6.1</version>
+        </dependency>
+
         <!-- FastJSON2 -->
         <dependency>
             <groupId>com.alibaba.fastjson2</groupId>

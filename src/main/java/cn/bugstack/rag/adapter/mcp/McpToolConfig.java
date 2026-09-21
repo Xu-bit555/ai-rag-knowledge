@@ -39,18 +39,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class McpToolConfig {
 
-    // Tool 名称常量
-    public static final String TOOL_PING = "onecase_ping";
-    public static final String TOOL_SERVER_INFO = "onecase_server_info";
-    public static final String TOOL_GENERATE_CASES = "onecase_generate_cases";
-    public static final String TOOL_VALIDATE_CASE = "onecase_validate_case";
-    public static final String TOOL_ADOPT_CASES = "onecase_adopt_cases";
-    public static final String TOOL_SEARCH_KNOWLEDGE = "onecase_search_knowledge";
-    public static final String TOOL_SEARCH_TEST_CASES = "onecase_search_test_cases";
-    public static final String TOOL_CREATE_TEST_RUN = "onecase_create_test_run";
-    public static final String TOOL_RECORD_CASE_ATTEMPT = "onecase_record_case_attempt";
-    public static final String TOOL_DIAGNOSE_FAILURE = "onecase_diagnose_failure";
-    public static final String TOOL_GET_TEST_RUN = "onecase_get_test_run";
+    /**
+     * Phase 2 A5: 删除 11 个 TOOL_* 常量.
+     *   单一权威源 = 每个 Tool 类的 @Tool(name = "onecase_xxx").
+     *   McpPingTool.serverInfo() 动态从 MethodToolCallbackProvider.getToolCallbacks() 数.
+     */
 
     /**
      * Phase 2 完成: 9 个核心 Tools + 2 个基础 Tools = 11 个

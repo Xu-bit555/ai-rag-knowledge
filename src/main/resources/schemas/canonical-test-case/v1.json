@@ -42,7 +42,11 @@
       "additionalProperties": false,
       "required": ["caseId", "title", "automationCandidate", "steps", "expectedOutcome"],
       "properties": {
-        "caseId":     { "type": "string", "pattern": "^TC_[A-Za-z0-9_]+$" },
+        "caseId":     {
+          "type": "string",
+          "pattern": "^TC_[A-Za-z0-9_]+$",
+          "description": "Phase 2 L5: 全局唯一 case 标识. 必须 TC_ 前缀 + 字母数字下划线. Java 层不再二次校验, Schema 单一权威."
+        },
         "title":      { "type": "string", "minLength": 4, "maxLength": 200 },
         "caseType":   { "enum": ["FUNCTIONAL", "FLOW", "EXCEPTION", "BOUNDARY", "UI", "COMPATIBILITY"] },
         "designMethod": { "enum": ["EQUIVALENCE", "BOUNDARY", "SCENARIO", "CAUSE_EFFECT", "ERROR_GUESSING", "ORTHOGONAL"] },
@@ -58,6 +62,7 @@
         },
         "testData": {
           "type": "object",
+          "description": "Phase 2 L5: 测试数据 Map. 值可为 string/number/boolean/string[]. 不要放复杂对象 (无嵌套).",
           "additionalProperties": {
             "anyOf": [
               { "type": "string" },

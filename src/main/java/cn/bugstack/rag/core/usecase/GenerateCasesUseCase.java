@@ -54,12 +54,14 @@ public class GenerateCasesUseCase {
     /**
      * 执行用例生成
      *
+     * Phase 2 L3: 加 retry loop. 校验失败时把 errors 回灌 prompt 重试一次 (max 2 次).
+     *
      * @param ragTag 知识库标签 (用于 RAG 检索)
      * @param requirement 用户需求描述 (Current PRD context,不入历史库)
      * @param referenceCaseIds 参考已有用例 ID 列表 (few-shot)
      * @param knowledgeDocs 历史知识库 Top-K 文档内容 (RAG)
      * @return CanonicalTestCase
-     * @throws IllegalStateException 当 DSL 校验失败
+     * @throws IllegalStateException 当 DSL 校验失败 (含 retry 次数 + 最后一次 errors)
      */
     public CanonicalTestCase execute(
             String ragTag,
@@ -72,21 +74,76 @@ public class GenerateCasesUseCase {
                 referenceCaseIds == null ? 0 : referenceCaseIds.size(),
                 knowledgeDocs == null ? 0 : knowledgeDocs.size());
 
-        // 1. 构建 DSL v1.0.0 专用 prompt
-        String prompt = buildCanonicalDslPrompt(requirement, referenceCaseIds, knowledgeDocs);
+        // L3 retry loop: 第 1 次用原始 prompt, 第 2 次附上上次 errors
+        ValidationResult lastValidation = null;
+        IllegalStateException lastError = null;
+        for (int retry = 0; retry < 2; retry++) {
+            String prompt = (retry == 0)
+                    ? buildCanonicalDslPrompt(requirement, referenceCaseIds, knowledgeDocs)
+                    : buildRetryPrompt(requirement, referenceCaseIds, knowledgeDocs,
+                            lastValidation, lastError);
 
-        // 2. 调 LLM
-        ChatResponse response = chatModel.call(new Prompt(prompt));
-        AssistantMessage message = response.getResult().getOutput();
-        String llmOutput = message != null ? message.getText() : "";
-        log.debug("LLM output length: {}", llmOutput.length());
+            try {
+                ChatResponse response = chatModel.call(new Prompt(prompt));
+                AssistantMessage message = response.getResult().getOutput();
+                String llmOutput = message != null ? message.getText() : "";
+                log.debug("LLM output length: {}, retry={}", llmOutput.length(), retry);
 
-        // 3. 清理 + 解析
-        String cleanJson = extractJson(llmOutput);
-        CanonicalTestCase dsl;
-        try {
-            dsl = objectMapper.readValue(cleanJson, CanonicalTestCase.class);
-        } catch (Exception e) {
+                String cleanJson = extractJson(llmOutput);
+                CanonicalTestCase dsl = objectMapper.readValue(cleanJson, CanonicalTestCase.class);
+
+                ValidationResult vr = dslValidator.validate(cleanJson);
+                if (vr.isValid()) {
+                    if (retry > 0) log.info("DSL generated successfully after {} retry", retry);
+                    return dsl;
+                }
+                lastValidation = vr;
+                lastError = null;
+                log.warn("DSL validation failed on retry={}, errors: {}",
+                        retry, String.join("; ", vr.getErrorMessages()));
+
+            } catch (Exception e) {
+                lastValidation = null;
+                lastError = new IllegalStateException(
+                        "LLM output processing failed on retry=" + retry + ": " + e.getMessage(), e);
+                log.warn("DSL generation failed on retry={}: {}", retry, e.getMessage());
+            }
+        }
+
+        // 2 次都失败: 抛含详细信息的异常
+        String detail = lastValidation != null
+                ? String.join("; ", lastValidation.getErrorMessages())
+                : (lastError != null ? lastError.getMessage() : "(unknown)");
+        throw new IllegalStateException(
+                "DSL generation failed after 2 retries. Last errors: " + detail,
+                lastError != null ? lastError : (lastValidation != null ? new RuntimeException(detail) : null));
+    }
+
+    /**
+     * L3: 重试 prompt — 把上次 errors 附加到 prompt, 让 LLM 知道哪里要改
+     */
+    private String buildRetryPrompt(
+            String requirement, List<String> referenceCaseIds, List<String> knowledgeDocs,
+            ValidationResult lastValidation, IllegalStateException lastError) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Retry 上次生成失败, 请按以下错误修正\n\n");
+        if (lastValidation != null) {
+            sb.append("## 上次校验错误:\n");
+            sb.append(String.join("\n", lastValidation.getErrorMessages()));
+            sb.append("\n\n");
+        }
+        if (lastError != null) {
+            sb.append("## 上次解析错误:\n");
+            sb.append(lastError.getMessage());
+            sb.append("\n\n");
+        }
+        sb.append("请重新生成 **严格符合 Canonical DSL v1.0.0 的 JSON**, 重点修正上面指出的字段.\n\n");
+        sb.append("---\n\n");
+        sb.append("# 原始需求\n");
+        sb.append(requirement != null ? requirement : "");
+        return sb.toString();
+    }
             throw new IllegalStateException(
                     "LLM output is not valid Canonical DSL JSON. First 500 chars: "
                             + cleanJson.substring(0, Math.min(500, cleanJson.length())), e);
@@ -99,13 +156,7 @@ public class GenerateCasesUseCase {
                     "Generated DSL failed validation: " + String.join("; ", vr.getErrorMessages()));
         }
 
-        // 5. audit save (MVP 暂为 no-op)
-        try {
-            testCaseRepository.saveRawDsl(dsl);
-        } catch (Exception e) {
-            log.warn("saveRawDsl audit failed (ignored)", e);
-        }
-
+        // Phase 2 D1: 删除 no-op audit saveRawDsl 调用 (testCaseRepository 不再暴露该方法)
         return dsl;
     }
 

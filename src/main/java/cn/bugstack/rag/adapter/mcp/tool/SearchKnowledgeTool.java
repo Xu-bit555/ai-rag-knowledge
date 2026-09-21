@@ -18,7 +18,7 @@ public class SearchKnowledgeTool {
 
     private final SearchKnowledgeUseCase searchKnowledgeUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_SEARCH_KNOWLEDGE,
+    @Tool(name = "onecase_search_knowledge",
             description = "Search OneCase historical knowledge base (PRD / spec / domain KB) via RAG. "
                     + "Returns array of {documentId, content, score, metadata}. Use this BEFORE "
                     + "onecase_generate_cases to inject historical context into the prompt.")

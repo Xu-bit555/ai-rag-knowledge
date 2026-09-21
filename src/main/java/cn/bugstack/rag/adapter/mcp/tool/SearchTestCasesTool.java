@@ -18,7 +18,7 @@ public class SearchTestCasesTool {
 
     private final SearchTestCasesUseCase searchTestCasesUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_SEARCH_TEST_CASES,
+    @Tool(name = "onecase_search_test_cases",
             description = "Search OneCase historical adopted test cases (rag_test_case table). "
                     + "Returns array of {caseId, title, automationCandidate, priority, steps, assertions, "
                     + "expectedOutcome}. Use for few-shot reference when generating new cases or to "

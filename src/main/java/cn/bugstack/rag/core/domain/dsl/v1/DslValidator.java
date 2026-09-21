@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * DslValidator - Canonical Test Case DSL 验证器
@@ -32,28 +33,39 @@ import java.util.List;
 @Component
 public class DslValidator {
 
-    private static final String SCHEMA_PATH = "/schemas/canonical-test-case/v1.json";
+    private static final String SCHEMA_BASE = "/schemas/canonical-test-case/";
     private static final String CURRENT_SCHEMA_VERSION = "1.0.0";
 
     private final ObjectMapper objectMapper;
-    private final Schema jsonSchema;
+    /**
+     * Phase 2 L6: schemaVersion → Schema 缓存. 支持未来 v2.0 / v3.0 平滑升级.
+     */
+    private final ConcurrentHashMap<String, Schema> schemaCache = new ConcurrentHashMap<>();
 
     public DslValidator(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.jsonSchema = loadSchema(objectMapper);
     }
 
-    private Schema loadSchema(ObjectMapper mapper) {
-        try (InputStream is = getClass().getResourceAsStream(SCHEMA_PATH)) {
-            if (is == null) {
-                throw new IllegalStateException("Schema not found: " + SCHEMA_PATH);
+    /**
+     * Phase 2 L6: 按 schemaVersion 字段动态加载对应 schema.
+     * 1.0.0 → v1.0.json (占位, 内容 { $ref: v1.json }), 未来 v2.0.0 → v2.0.json.
+     */
+    private Schema loadSchemaForVersion(String version) {
+        return schemaCache.computeIfAbsent(version, v -> {
+            String path = SCHEMA_BASE + "v" + v + ".json";
+            try (InputStream is = getClass().getResourceAsStream(path)) {
+                if (is == null) {
+                    throw new IllegalArgumentException(
+                            "Unknown schemaVersion '" + v + "' (no schema at " + path + ")");
+                }
+                JsonNode schemaNode = objectMapper.readTree(is);
+                SchemaRegistry registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
+                log.info("Loaded DSL schema: version={}, path={}", v, path);
+                return registry.getSchema(schemaNode);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to load DSL schema " + path, e);
             }
-            JsonNode schemaNode = mapper.readTree(is);
-            SchemaRegistry registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
-            return registry.getSchema(schemaNode);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to load DSL schema", e);
-        }
+        });
     }
 
     /**
@@ -68,24 +80,41 @@ public class DslValidator {
 
     /**
      * 验证 DSL JSON 字符串
+     *
+     * Phase 2 L6: 按 dsl.schemaVersion 字段动态加载 schema.
      */
     public ValidationResult validate(String dslJson) {
         List<FieldError> errors = new ArrayList<>();
 
+        // 先 parse 拿 schemaVersion, 决定加载哪份 schema
+        JsonNode jsonNode;
+        try {
+            jsonNode = objectMapper.readTree(dslJson);
+        } catch (Exception e) {
+            errors.add(new FieldError("$", "PARSE_ERROR", "Invalid JSON: " + e.getMessage()));
+            return ValidationResult.invalid(errors);
+        }
+
+        String version = jsonNode.path("schemaVersion").asText("1.0.0");
+        Schema schema;
+        try {
+            schema = loadSchemaForVersion(version);
+        } catch (IllegalArgumentException iae) {
+            errors.add(new FieldError("$.schemaVersion", "UNKNOWN_VERSION", iae.getMessage()));
+            return ValidationResult.invalid(errors);
+        }
+
         // 阶段 1: JSON Schema 校验
         try {
-            JsonNode jsonNode = objectMapper.readTree(dslJson);
-            List<Error> schemaErrors = jsonSchema.validate(jsonNode);
+            List<Error> schemaErrors = schema.validate(jsonNode);
             for (Error err : schemaErrors) {
-                // P0-4 fixup: networknt 2.0 改名 getType() → getKeyword()
                 errors.add(new FieldError(
                         pointerFromInstanceLocation(err.getInstanceLocation()),
                         "SCHEMA_" + err.getKeyword(),
                         err.getMessage()));
             }
         } catch (Exception e) {
-            errors.add(new FieldError("$", "PARSE_ERROR", "Invalid JSON: " + e.getMessage()));
-            return ValidationResult.invalid(errors);
+            errors.add(new FieldError("$", "SCHEMA_ERROR", e.getMessage()));
         }
 
         // 阶段 2: 业务语义校验
@@ -144,10 +173,8 @@ public class DslValidator {
     private void validateTestCase(TestCaseEntity tc, int index, List<FieldError> errors) {
         String base = "$.cases[" + (index - 1) + "]";
 
-        if (tc.getCaseId() == null || !tc.getCaseId().matches("^TC_[A-Za-z0-9_]+$")) {
-            errors.add(new FieldError(base + ".caseId", "SEM_CASE_ID_FORMAT",
-                    "caseId must match ^TC_[A-Za-z0-9_]+$, got: " + tc.getCaseId()));
-        }
+        // Phase 2 L5: caseId 格式校验由 JSON Schema (pattern) 单一权威, Java 不再重复.
+        //   之前 Java 层重复校验会导致 LLM 看到 2 次 "caseId must match..." 错误, 浪费时间.
 
         if (tc.getTitle() == null || tc.getTitle().isBlank()) {
             errors.add(new FieldError(base + ".title", "SEM_FIELD_REQUIRED", "title is required"));

@@ -44,6 +44,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    name = "onecase.consumer.document-update.enabled",
+    havingValue = "true",
+    matchIfMissing = false  // Phase 2 R2: 默认关闭, 避免全代码库无 producer 的 consumer 永远空转
+)
 public class DocumentUpdateConsumer {
 
     @Autowired

@@ -19,7 +19,7 @@ public class DiagnoseFailureTool {
 
     private final DiagnoseFailureUseCase diagnoseFailureUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_DIAGNOSE_FAILURE,
+    @Tool(name = "onecase_diagnose_failure",
             description = "Diagnose a failed attempt via LLM. Returns structured FailureDiagnosis "
                     + "{category, summary, rootCause, confidence, suggestedRecovery}. PERSISTS "
                     + "to rag_failure_diag. DOES NOT modify TestCase - suggestedRecovery is runtime "

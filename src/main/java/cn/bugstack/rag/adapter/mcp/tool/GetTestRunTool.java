@@ -17,7 +17,7 @@ public class GetTestRunTool {
 
     private final GetTestRunUseCase getTestRunUseCase;
 
-    @Tool(name = McpToolConfig.TOOL_GET_TEST_RUN,
+    @Tool(name = "onecase_get_test_run",
             description = "Get complete TestRun structure: status, counts, all cases with "
                     + "latestAttempt + attemptHistory + diagnosis. Returns counts based on LATEST "
                     + "attempt per case (not first attempt). Use this to inspect run state, generate "

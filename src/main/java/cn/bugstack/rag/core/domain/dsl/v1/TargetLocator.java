@@ -58,7 +58,8 @@ public class TargetLocator {
     @JsonProperty("xpath")
     private String xpath;
 
-    /** ROLE/TEXT: exact match? */
+    /** ROLE/TEXT: exact match? (默认 false, Phase 2 L1: Boolean → boolean + @Builder.Default) */
+    @Builder.Default
     @JsonProperty("exact")
-    private Boolean exact;
+    private boolean exact = false;
 }

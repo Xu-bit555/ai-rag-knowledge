@@ -1,9 +1,12 @@
 package cn.bugstack.rag.core.usecase;
 
 import cn.bugstack.rag.core.domain.dsl.v1.TestCaseEntity;
-import cn.bugstack.rag.core.port.TestCaseRepositoryPort;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -14,15 +17,19 @@ import java.util.Map;
 /**
  * SearchTestCasesUseCase - 检索历史已采纳用例
  *
- * MVP: PostgreSQL 简单 LIKE 匹配 title/caseId
- * Phase 4+: 可加 pgvector 向量检索
+ * Phase 2 D3: 改用 SQL ILIKE + 复用 V4 已建的 pg_trgm GIN 索引
+ *   (idx_rag_test_case_title_trgm / idx_rag_test_case_case_id_trgm)
+ *   替代之前 in-memory LIKE 全表扫描.
+ *
+ * 当 query 为空时, 退化为按 updated_at DESC 取最近 k 条 ADOPTED case.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SearchTestCasesUseCase {
 
-    private final TestCaseRepositoryPort testCaseRepository;
+    private final NamedParameterJdbcTemplate jdbc;
+    private final ObjectMapper objectMapper;
 
     /**
      * 检索
@@ -30,36 +37,56 @@ public class SearchTestCasesUseCase {
      * @param ragTag 知识库标签
      * @param query 查询关键词
      * @param topK 返回条数
-     * @return List of {caseId, title, automationCandidate, steps, assertions, similarity}
+     * @return List of {caseId, title, automationCandidate, steps, assertions, expectedOutcome}
      */
     public List<Map<String, Object>> execute(String ragTag, String query, Integer topK) {
         int k = (topK != null && topK > 0) ? topK : 10;
         log.info("SearchTestCasesUseCase: ragTag={}, query.length={}, topK={}",
                 ragTag, query == null ? 0 : query.length(), k);
 
-        List<TestCaseEntity> all = testCaseRepository.findAdoptedByRagTag(ragTag);
+        String sql;
+        MapSqlParameterSource p = new MapSqlParameterSource()
+                .addValue("ragTag", ragTag)
+                .addValue("limit", k);
 
         if (query == null || query.isBlank()) {
-            return toMaps(all.subList(0, Math.min(k, all.size())));
+            // 无关键词: 按 updated_at DESC 取最近 k 条 ADOPTED
+            sql = """
+                SELECT raw_dsl FROM rag_test_case
+                WHERE rag_tag = :ragTag AND status = 'ADOPTED'
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """;
+        } else {
+            // D3: 用 ILIKE + pg_trgm GIN 索引 (V4 已建)
+            // % 和 _ 需要转义, 避免用户输入被当 SQL 通配符
+            String safe = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            sql = """
+                SELECT raw_dsl FROM rag_test_case
+                WHERE rag_tag = :ragTag
+                  AND status = 'ADOPTED'
+                  AND (title ILIKE :kw ESCAPE '\\' OR case_id ILIKE :kw ESCAPE '\\')
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """;
+            p.addValue("kw", "%" + safe + "%");
         }
 
-        String lower = query.toLowerCase();
-        List<Map<String, Object>> matched = new ArrayList<>();
-        for (TestCaseEntity tc : all) {
-            String title = tc.getTitle() != null ? tc.getTitle().toLowerCase() : "";
-            String caseId = tc.getCaseId() != null ? tc.getCaseId().toLowerCase() : "";
-            if (title.contains(lower) || caseId.contains(lower)) {
-                matched.add(toMap(tc));
-                if (matched.size() >= k) break;
+        List<TestCaseEntity> matched = jdbc.query(sql, p, (rs, rowNum) -> {
+            try {
+                return objectMapper.readValue(rs.getString(1), TestCaseEntity.class);
+            } catch (JsonProcessingException e) {
+                log.error("Failed to deserialize DSL for ragTag={}", ragTag, e);
+                return null;
             }
-        }
-        log.info("SearchTestCasesUseCase: matched={} from total={}", matched.size(), all.size());
-        return matched;
-    }
+        });
 
-    private List<Map<String, Object>> toMaps(List<TestCaseEntity> entities) {
+        // 过滤反序列化失败
         List<Map<String, Object>> result = new ArrayList<>();
-        for (TestCaseEntity tc : entities) result.add(toMap(tc));
+        for (TestCaseEntity tc : matched) {
+            if (tc != null) result.add(toMap(tc));
+        }
+        log.info("SearchTestCasesUseCase: matched={}", result.size());
         return result;
     }
 
