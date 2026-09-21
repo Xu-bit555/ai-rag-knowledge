@@ -3,22 +3,22 @@ server:
 
 spring:
   application:
-    name: ai-rag-knowledge
+    name: onecase
+
+  main:
+    # 关闭 bean 重定义限制, AnthropicChatModelConfig 的 ChatModel 与禁用后的
+    # Spring AI 自动 OpenAI ChatModel 不会撞名 (禁用后 OpenAI 不再注册 bean)
+    allow-bean-definition-overriding: true
 
   ai:
-    # MiniMax 云端API (兼容OpenAI格式)
-    minimax:
-      base-url: https://api.minimax.chat
-      api-key: ${MINIMAX_API_KEY}
-      model: MiniMax-M2.7
-
-    # OpenAI兼容配置 (指向MiniMax)
+    # Anthropic (Claude) — OneCase 唯一 LLM, 配置由 AnthropicChatModelConfig 手工 builder 构造.
+    # 这里仍然提供 yml 自动配置覆盖入口, 但通过 spring.ai.openai.chat.enabled=false 抑制
+    # Spring AI 自动 ChatModel bean (避免与手工 bean 撞名).
     openai:
-      base-url: https://api.minimax.chat
-      api-key: ${MINIMAX_API_KEY}
       chat:
-        options:
-          model: MiniMax-M2.7
+        enabled: false        # 关闭 OpenAI 自动装配 (与 AnthropicChatModelConfig 互斥)
+      embedding:
+        enabled: false        # 关闭 OpenAI 自动 embedding (避免与 SiliconFlowEmbeddingModel 撞名)
 
     # Jina Rerank配置
     jina:
@@ -42,28 +42,42 @@ spring:
         group: rag-ingest-group
         consumer: rag-ingest-consumer
 
-    # Embedding模型配置（支持切换）
+    # Embedding模型配置
     embedding:
-      # 模型类型：bge / minimax / nomic
       provider: bge
-      # 向量维度（BAAI/bge-large-zh-v1.5 通常是 1024）
       dimensions: 1024
-      # BGE模型（使用 SiliconFlow 托管的兼容API）
       bge:
-        base-url: https://api.siliconflow.cn/v1
+        base-url: ${SILICONFLOW_BASE_URL:https://api.siliconflow.cn/v1}
         api-key: ${SILICONFLOW_API_KEY}
-        model: BAAI/bge-large-zh-v1.5
+        model: BAAI/bge-m3
 
     # 向量存储配置
+    # 注意: PgVectorStore 在 VectorStoreConfig 中手工 builder 构造,
+    #       不读此处配置。表名见 VectorStoreConfig.VECTOR_TABLE_NAME
     vectorstore:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
 
+    # MCP Server 配置 (Spring AI 1.1.x Streamable HTTP)
+    mcp:
+      server:
+        name: ${MCP_SERVER_NAME:onecase-mcp}
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        stdio: false
+        protocol: STREAMABLE
+        type: SYNC
+        annotation-scanner:
+          enabled: true
+        capabilities:
+          tool: true
+          resource: true
+          prompt: false
+
   datasource:
-    url: jdbc:postgresql://49.232.146.225:15432/ai-rag-knowledge
-    username: postgres
-    password: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/onecase}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -71,11 +85,29 @@ spring:
 
   sql:
     init:
-      mode: always
+      mode: never   # P0-2 修复: Flyway 接管 migration, 关闭 Spring 内置 schema.sql init
+
+  # P0-2: Flyway 自动执行 db/migration/V*.sql
+  # baseline-on-migrate=true + baseline-version=1 让已存在的 spring_ai_vectors 表被视为 V1 baseline
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
+    schemas: public
+    table: flyway_schema_history
+
+# OneCase 自定义配置
+onecase:
+  mcp:
+    enabled: ${ONECASE_MCP_ENABLED:true}
+  artifact:
+    storage-dir: ${ARTIFACT_STORAGE_DIR:/onecase-artifacts}
 
 logging:
   level:
     root: INFO
     cn.bugstack.rag: DEBUG
+    org.springframework.ai: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

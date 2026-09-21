@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-21T21:30:00Z",
+  "sourceRequirementRef": "prd/04_ai_notebook_prd.md",
+  "summary": {
+    "app": "terabox-ai",
+    "page": "/ai/notebook/list",
+    "totalCases": 6,
+    "testScope": "MVP smoke"
+  },
+  "cases": [
+    {
+      "caseId": "TC_NB_OK",
+      "title": "笔记本列表页正常加载",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P0",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "后退" } }
+      ],
+      "expectedOutcome": "已登录用户访问笔记本列表页应正常渲染，看到「后退」按钮。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/notebook/list" },
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "button", "name": "后退" } }
+      ]
+    },
+    {
+      "caseId": "TC_NB_BACK",
+      "title": "点击后退按钮返回 AI 主页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "后退" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「后退」后，URL 应变成 `/ai/index/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/index" }
+      ]
+    },
+    {
+      "caseId": "TC_NB_CREATE_BTN",
+      "title": "新建笔记本按钮可见",
+      "caseType": "UI",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "新建笔记本" } }
+      ],
+      "expectedOutcome": "笔记本列表页应展示「新建笔记本」按钮。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "button", "name": "新建笔记本" } }
+      ]
+    },
+    {
+      "caseId": "TC_NB_CREATE_CLICK",
+      "title": "点击新建笔记本按钮弹出对话框",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "新建笔记本" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「新建笔记本」后，应弹出创建对话框或跳转到新建页面。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "笔记本名称" } }
+      ]
+    },
+    {
+      "caseId": "TC_NB_DUPLICATE_NAME",
+      "title": "创建重名笔记本提示冲突",
+      "caseType": "EXCEPTION",
+      "designMethod": "ERROR_GUESSING",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox", "已存在名为「测试笔记本」的笔记本"],
+      "testData": { "name": "测试笔记本" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "新建笔记本" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 1000 },
+        { "order": 5, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "笔记本名称" }, "value": "测试笔记本" },
+        { "order": 6, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "确定" } }
+      ],
+      "expectedOutcome": "创建重名笔记本时应提示「名称已存在」或自动追加后缀。",
+      "assertions": [
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "TEXT", "text": "已存在" }, "expected": "已存在" }
+      ]
+    },
+    {
+      "caseId": "TC_NB_EMPTY_LIST",
+      "title": "笔记本列表为空时显示空状态",
+      "caseType": "EXCEPTION",
+      "designMethod": "BOUNDARY",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox", "用户从未创建过笔记本"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/notebook/list" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 }
+      ],
+      "expectedOutcome": "新用户访问笔记本列表应看到空状态提示（如「暂无笔记本」）和「新建笔记本」CTA 按钮。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "button", "name": "新建笔记本" } },
+        { "kind": "URL_CONTAINS", "expected": "/ai/notebook/list" }
+      ]
+    }
+  ]
+}

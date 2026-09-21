@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - OneCase Demo</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 80px auto; padding: 24px; }
+        h1 { color: #1f6feb; }
+        .welcome { font-size: 18px; padding: 12px; background: #ddf4ff; border-radius: 4px; }
+        .meta { color: #57606a; font-size: 13px; margin-top: 16px; }
+        a { color: #1f6feb; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>OneCase Demo Dashboard</h1>
+    <p id="welcomeMessage" class="welcome" th:text="${welcome}">欢迎回来</p>
+    <p class="meta">登录用户: <span th:text="${username}">user</span></p>
+    <p><a href="/demo/logout">退出登录</a></p>
+</body>
+</html>

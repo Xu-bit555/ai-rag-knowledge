@@ -1,0 +1,14 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: demo-web
+
+app:
+  demo:
+    username: test
+    password: test123
+  login:
+    button-text: 登录
+    welcome: 欢迎回来,登录成功

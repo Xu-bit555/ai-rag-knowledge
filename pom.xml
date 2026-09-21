@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.3</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -16,11 +16,11 @@
     <version>2.0</version>
     <packaging>jar</packaging>
 
-    <description>AI RAG Knowledge 知识库服务 - MVC单模块结构</description>
+    <description>OneCase 2.0 - Test Intelligence Backend + MCP Server</description>
 
     <properties>
         <java.version>17</java.version>
-        <spring-ai.version>0.8.1</spring-ai.version>
+        <spring-ai.version>1.1.8</spring-ai.version>
     </properties>
 
     <repositories>
@@ -28,11 +28,6 @@
             <id>maven-central</id>
             <name>Maven Central</name>
             <url>https://repo1.maven.org/maven2</url>
-        </repository>
-        <repository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
         </repository>
     </repositories>
 
@@ -73,10 +68,38 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
+        <!-- Flyway: 自动执行 db/migration/V*.sql (P0-2 修复 V2/V3 不自动执行) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>10.10.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>10.10.0</version>
+        </dependency>
+
         <!-- Spring AI OpenAI -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+
+        <!-- Spring AI MCP Server (Streamable HTTP via WebMVC) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+
+        <!-- Spring AI Anthropic (for OneCase LLM via api.minimaxi.com/anthropic)
+             注意: spring-ai-starter-anthropic 不在 Maven Central (在 Spring 私有仓库),
+             这里只引核心 jar, 配置由 AnthropicChatModelConfig 手工 builder 构造.
+             spring-ai-anthropic 在 1.1.x 依赖 spring-web-core + webclient reactive. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-anthropic</artifactId>
+            <version>${spring-ai.version}</version>
         </dependency>
 
         <!-- Spring AI PostgreSQL VectorStore -->
@@ -124,6 +147,17 @@
             <version>2.0.30</version>
         </dependency>
 
+        <!-- JSON Schema Validator (for Canonical DSL validation)
+             必须 >= 2.0: MCP server 加载 mcp-json-schema 时需要 dialect.Dialects 类,
+             而 json-schema-validator 1.5.x 不带 dialect 包, 1.x 路径会 NoClassDefFoundError.
+             注意 maven 依赖仲裁选最低, mcp-json-schema 可能默吃 1.x, 所以这里 < 没用,
+             真正生效靠下面 排除 1.5.x + 强制 2.0.x 这一招 -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>2.0.0</version>
+        </dependency>
+
         <!-- Tabula-Java - PDF表格提取 -->
         <dependency>
             <groupId>technology.tabula</groupId>
@@ -135,6 +169,8 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>1.18.42</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Test -->
@@ -147,6 +183,25 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <!-- Spring 6.1+ 需要保留方法参数名, 否则 @Bean/@Configuration
+                             构造器参数注入会得到 null, 所有 Tool bean 注入失败,
+                             MethodToolCallbackProvider.toolObjects: [] -->
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.42</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

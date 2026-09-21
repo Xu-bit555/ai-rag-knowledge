@@ -40,3 +40,12 @@ build/
 /data/
 /xfg-dev-tech-app/data/
 /xfg-dev-tech-app/cloned-repo/
+
+### Jev A/B Evaluation Pipeline ###
+# plan §二十六 12: 防止真实知识库片段、API key、cache 泄露
+/evaluation/cache/
+/evaluation/results/
+/evaluation/retrieval/
+# datasets/ 暂保留（schema 公开），运行时可加 ignore
+# /evaluation/datasets/
+/evaluation/reports/jev-ab-report.md

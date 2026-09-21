@@ -4,6 +4,7 @@ import cn.bugstack.rag.model.dto.AddKnowledgeRequest;
 import cn.bugstack.rag.model.dto.QueryKnowledgeResponse;
 import cn.bugstack.rag.model.dto.QueryTagListResponse;
 import cn.bugstack.rag.model.response.Response;
+import cn.bugstack.rag.service.IngestRetryService;
 import cn.bugstack.rag.service.KnowledgeService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -24,6 +25,9 @@ public class KnowledgeController {
 
     @Resource
     private KnowledgeService knowledgeService;
+
+    @Resource
+    private IngestRetryService ingestRetryService;   // P0-9: DLQ 重试端点
 
     /**
      * 查询知识库标签列表
@@ -104,5 +108,27 @@ public class KnowledgeController {
             @RequestParam("docId") String docId) {
         log.info("删除知识库文档, ragTag: {}, docId: {}", ragTag, docId);
         return knowledgeService.deleteKnowledge(ragTag, docId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // P0-9: 摄入任务 DLQ 重试端点
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 重试单个失败任务 (从 DLQ 回放到主 stream)
+     */
+    @PostMapping("ingest/retry")
+    public Response<String> retryIngest(@RequestParam("taskId") String taskId) {
+        log.info("ingest retry: taskId={}", taskId);
+        return ingestRetryService.retry(taskId);
+    }
+
+    /**
+     * 批量重试 DLQ 中的所有任务 (单次最多 100 条)
+     */
+    @PostMapping("ingest/retry-all")
+    public Response<Integer> retryAllIngest() {
+        log.info("ingest retry-all from DLQ");
+        return ingestRetryService.retryAll();
     }
 }

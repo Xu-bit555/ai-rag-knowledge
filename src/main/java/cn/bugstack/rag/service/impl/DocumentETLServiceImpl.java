@@ -69,8 +69,10 @@ public class DocumentETLServiceImpl implements cn.bugstack.rag.service.DocumentE
             // TikaDocumentReader：Spring AI 提供的通用文档解析器，底层调用 Apache Tika 引擎
             TikaDocumentReader reader = new TikaDocumentReader(resource);
             List<Document> documents = reader.get();
-            // 为原始文档设置来源文件名，便于追溯
+            // P0-10: 同时写 sourceDoc（与 ParagraphIngestService 一致）+ sourceFile（兼容旧）
+            //   修复 deleteBySourceDoc 漏删、KnowledgeDoc.sourceDoc 返回 null
             for (Document doc : documents) {
+                doc.getMetadata().put("sourceDoc", fileName);
                 doc.getMetadata().put("sourceFile", fileName);
             }
             log.info("文档提取完成, fileName: {}, 文档块数: {}", fileName, documents.size());
@@ -126,19 +128,18 @@ public class DocumentETLServiceImpl implements cn.bugstack.rag.service.DocumentE
         // - maxTokens=1000：每个 chunk 上限 1000 token（约 750 中文汉字）
         // - overlapTokens=200：相邻 chunk 重叠 200 token（约 150 中文汉字），关键设计！
         //   作用：检索时 query 与 chunk 匹配，重叠区域确保语义跨 chunk 连贯不中断
-        TokenTextSplitter tokenSplitter = new TokenTextSplitter(
-                config.getMaxTokens(),                    // max tokens per chunk  maxTokens=1000
-                config.getMinChunkLengthToEmbed(),       // min chunk length to embed
-                config.getOverlapTokens(),              // 🔑 相邻 chunk 重叠 token 数（关键！）
-                config.getMinTokens(),                  // min tokens
-                config.isKeepSeparator()                // keep separator
-        );
+        TokenTextSplitter tokenSplitter = TokenTextSplitter.builder()
+                .withChunkSize(config.getMaxTokens())
+                .withMinChunkLengthToEmbed(config.getMinChunkLengthToEmbed())
+                .withMinChunkSizeChars(config.getMinTokens())
+                .withKeepSeparator(config.isKeepSeparator())
+                .build();
 
         List<Document> allChunks = new ArrayList<>();
 
         // 遍历每个原始 Document（一个 PDF/Word 文件解析后可能包含多个 Document）
         for (Document doc : documents) {
-            String content = doc.getContent();
+            String content = doc.getText();
             if (content == null || content.isBlank()) {
                 // 跳过空文档
                 continue;
@@ -210,26 +211,26 @@ public class DocumentETLServiceImpl implements cn.bugstack.rag.service.DocumentE
                                            int startIndex) {
         // 创建新的 Document，避免浅拷贝共享 metadata 引用
         Document copy = new Document(
-                semanticDoc.getContent(),
+                semanticDoc.getText(),
                 new java.util.HashMap<>(semanticDoc.getMetadata())  // 🔑 深拷贝 metadata
         );
         copy.getMetadata().put("knowledge", ragTag);
         copy.getMetadata().put("type", "knowledge");
 
-        // TokenTextSplitter 返回切分后的文本列表
-        List<String> texts = tokenSplitter.split(copy.getContent(), config.getMaxTokens());
+        // TokenTextSplitter 返回切分后的 Document 列表（Spring AI 1.1.x）
+        List<Document> chunks = tokenSplitter.split(copy);
 
         List<Document> result = new ArrayList<>();
-        for (int i = 0; i < texts.size(); i++) {
-            String text = texts.get(i);
+        for (Document chunk : chunks) {
+            String text = chunk.getText();
             if (text == null || text.isBlank()) {
                 continue;
             }
             // 每个 chunk 独立 metadata，深拷贝避免共享引用
             java.util.HashMap<String, Object> chunkMetadata = new java.util.HashMap<>(copy.getMetadata());
 
-            Document chunk = new Document(text, chunkMetadata);
-            result.add(chunk);
+            Document resultChunk = new Document(text, chunkMetadata);
+            result.add(resultChunk);
         }
         return result;
     }
@@ -305,18 +306,17 @@ public class DocumentETLServiceImpl implements cn.bugstack.rag.service.DocumentE
     private List<Document> transformForUpdate(List<Document> documents, String ragTag, String docId) {
         SplitterConfigService.SplitterConfig config = splitterConfigService.getConfig();
 
-        TokenTextSplitter tokenSplitter = new TokenTextSplitter(
-                config.getMaxTokens(),
-                config.getMinChunkLengthToEmbed(),
-                config.getOverlapTokens(),
-                config.getMinTokens(),
-                config.isKeepSeparator()
-        );
+        TokenTextSplitter tokenSplitter = TokenTextSplitter.builder()
+                .withChunkSize(config.getMaxTokens())
+                .withMinChunkLengthToEmbed(config.getMinChunkLengthToEmbed())
+                .withMinChunkSizeChars(config.getMinTokens())
+                .withKeepSeparator(config.isKeepSeparator())
+                .build();
 
         List<Document> allChunks = new ArrayList<>();
 
         for (Document doc : documents) {
-            String content = doc.getContent();
+            String content = doc.getText();
             if (content == null || content.isBlank()) {
                 continue;
             }

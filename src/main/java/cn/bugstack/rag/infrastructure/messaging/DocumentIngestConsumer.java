@@ -211,6 +211,37 @@ public class DocumentIngestConsumer {
                 ingestTaskRepository.updateStatus(taskId, IngestTask.TaskStatus.FAILED, errMsg + " [重试" + maxRetry + "次均失败]");
                 stream.ack(group, id);
 
+                // P0-9: 写入 DLQ stream, 包含完整上下文 (taskId, ragTag, fileName, errorMessage, failedAt)
+                //   便于 /api/v1/knowledge/ingest/retry 端点回放
+                try {
+                    RStream<String, String> dlq = redissonClient.getStream(streamConfig.getDlqStreamKey());
+                    String fileName = task != null && task.getFileName() != null ? task.getFileName() : "";
+                    dlq.add(org.redisson.api.stream.StreamAddArgs
+                            .<String, String>entries(
+                                    "taskId", taskId,
+                                    "ragTag", ragTag != null ? ragTag : "",
+                                    "fileName", fileName,
+                                    "errorMessage", errMsg,
+                                    "failedAt", String.valueOf(System.currentTimeMillis())));
+                    log.warn("任务失败, 已写入 DLQ: streamKey={}, taskId={}", streamConfig.getDlqStreamKey(), taskId);
+                } catch (Exception dlqEx) {
+                    log.error("写入 DLQ 失败 (不影响主流程, 任务已标记 FAILED): taskId={}", taskId, dlqEx);
+                }
+
+                // P0-9: 延长文件 TTL (默认 7 天), 避免 24h 后 retry 找不到文件
+                try {
+                    String fileKey = "rag:file:" + taskId;
+                    RBucket<byte[]> fileBucket = redissonClient.getBucket(fileKey);
+                    if (fileBucket.isExists()) {
+                        long ttlMs = (long) streamConfig.getFileTtlHours() * 3600 * 1000;
+                        fileBucket.expire(Duration.ofMillis(ttlMs));
+                        log.info("任务失败, 延长文件 TTL 至 {} 小时, taskId={}",
+                                streamConfig.getFileTtlHours(), taskId);
+                    }
+                } catch (Exception ttlEx) {
+                    log.warn("延长文件 TTL 失败: taskId={}", taskId, ttlEx);
+                }
+
                 log.error("摄入任务失败, taskId: {}, 重试{}次均失败, 错误: {}", taskId, maxRetry, errMsg, businessException);
             }
         }

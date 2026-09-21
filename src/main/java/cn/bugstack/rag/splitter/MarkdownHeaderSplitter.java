@@ -167,7 +167,7 @@ public class MarkdownHeaderSplitter {
 
         // 获取上一个chunk的内容
         Document lastDoc = existingDocs.get(existingDocs.size() - 1);
-        String lastContent = lastDoc.getContent();
+        String lastContent = lastDoc.getText();
 
         // 提取尾部overlapChars字符
         int overlapStart = Math.max(0, lastContent.length() - overlapChars);

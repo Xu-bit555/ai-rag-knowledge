@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-21T21:30:00Z",
+  "sourceRequirementRef": "prd/02_image_generation_prd.md",
+  "summary": {
+    "app": "terabox-ai",
+    "page": "/ai/photo-to-photo/chinese",
+    "totalCases": 7,
+    "testScope": "MVP smoke"
+  },
+  "cases": [
+    {
+      "caseId": "TC_IMG_OK",
+      "title": "正常输入 prompt 后点击生成",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P0",
+      "risk": "HIGH",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox", "用户积分 ≥ 5"],
+      "testData": { "prompt": "一只在花园里玩耍的橙色小猫" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "order": 4, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" }, "value": "一只在花园里玩耍的橙色小猫" },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } },
+        { "order": 6, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } },
+        { "order": 7, "action": "WAIT", "timeoutMs": 30000 }
+      ],
+      "expectedOutcome": "输入合法 prompt 后，点击「生成」按钮应在合理时间内生成图片并展示在结果区，扣除 5 积分。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "TEXT", "text": "本次消耗" }, "expected": "本次消耗" }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_EMPTY",
+      "title": "空输入时生成按钮禁用",
+      "caseType": "EXCEPTION",
+      "designMethod": "BOUNDARY",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "order": 4, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } }
+      ],
+      "expectedOutcome": "输入框为空时，「生成」按钮应处于禁用状态。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_EXAMPLE",
+      "title": "点击示例 prompt 填入输入框",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "酥皮火车" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 1000 },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } }
+      ],
+      "expectedOutcome": "点击「酥皮火车」示例后，该 prompt 应自动填入主输入框。",
+      "assertions": [
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" }, "expected": "酥皮火车" }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_MODE_VIDEO",
+      "title": "切换到视频模式跳转到视频生成页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "视频" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 3000 }
+      ],
+      "expectedOutcome": "点击「视频」单选按钮后，页面导航到 `/ai/photo-to-video/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/photo-to-video" }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_MODEL",
+      "title": "模型选择器显示当前模型名称",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "Nano Banana" } },
+        { "order": 4, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "本次消耗" } }
+      ],
+      "expectedOutcome": "页面应显示当前模型「Nano Banana」及单次消耗积分提示。",
+      "assertions": [
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "TEXT", "text": "5积分" }, "expected": "5积分" }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_BACK",
+      "title": "点击后退按钮返回 AI 主页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "后退" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「后退」后，URL 应变成 `/ai/index/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/index" }
+      ]
+    },
+    {
+      "caseId": "TC_IMG_GALLERY",
+      "title": "广场分类标签可见",
+      "caseType": "UI",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-photo/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "Gallery" } },
+        { "order": 4, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "精选推荐" } },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "AI 照相馆" } }
+      ],
+      "expectedOutcome": "页面应展示多个广场分类标签（Gallery、精选推荐、AI 照相馆等）。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "TEXT", "text": "Gallery" } },
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "TEXT", "text": "AI 照相馆" } }
+      ]
+    }
+  ]
+}

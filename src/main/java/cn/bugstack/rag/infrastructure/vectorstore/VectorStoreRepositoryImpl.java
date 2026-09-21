@@ -6,7 +6,7 @@ import cn.bugstack.rag.model.dto.TestCaseStatsDTO;
 import cn.bugstack.rag.repository.IVectorStoreRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.embedding.EmbeddingClient;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +17,10 @@ import java.util.*;
 
 /**
  * 向量存储仓储实现（PGVector）
+ *
+ * Spring AI 1.x:
+ * - EmbeddingClient → EmbeddingModel
+ * - SearchRequest.query(...).withTopK(...).withFilterExpression(...) → SearchRequest.builder()...
  */
 @Slf4j
 @Repository
@@ -29,7 +33,7 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private EmbeddingClient embeddingClient;
+    private EmbeddingModel embeddingClient;
 
     @Override
     public void addDocument(String content, Map<String, Object> metadata) {
@@ -89,12 +93,14 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public List<String> queryTestCases(String ragTag, int topK) {
         log.info("查询测试用例(仅已采纳), ragTag: {}, topK: {}", ragTag, topK);
 
-        SearchRequest request = SearchRequest.query("")
-                .withTopK(topK)
-                .withFilterExpression("knowledge == '" + ragTag + "' AND type == 'test_case' AND adoptionStatus == 'ADOPTED'");
+        SearchRequest request = SearchRequest.builder()
+                .query("")
+                .topK(topK)
+                .filterExpression(SafeFilterBuilder.byKnowledgeTypeAdoptionStatus(ragTag, "test_case", "ADOPTED"))
+                .build();
 
         List<Document> docs = vectorStore.similaritySearch(request);
-        return docs.stream().map(Document::getContent).toList();
+        return docs.stream().map(Document::getText).toList();
     }
 
     @Override
@@ -117,11 +123,13 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
 
     @Override
     public List<String> similaritySearch(String query, String knowledgeTag, int topK) {
-        SearchRequest request = SearchRequest.query(query)
-                .withTopK(topK)
-                .withFilterExpression("knowledge == '" + knowledgeTag + "'");
+        SearchRequest request = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .filterExpression(SafeFilterBuilder.byKnowledge(knowledgeTag))
+                .build();
         List<Document> docs = vectorStore.similaritySearch(request);
-        return docs.stream().map(Document::getContent).toList();
+        return docs.stream().map(Document::getText).toList();
     }
 
     /**
@@ -135,25 +143,26 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public List<DocumentWithScoreDTO> similaritySearchWithScore(String query, String knowledgeTag, int topK) {
         log.info("带分数的向量检索, query: {}, knowledgeTag: {}, topK: {}", query, knowledgeTag, topK);
 
-        SearchRequest request = SearchRequest.query(query)
-                .withTopK(topK)
-                .withFilterExpression("knowledge == '" + knowledgeTag + "'");
+        SearchRequest request = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .filterExpression(SafeFilterBuilder.byKnowledge(knowledgeTag))
+                .build();
         List<Document> docs = vectorStore.similaritySearch(request);
 
-        // 计算query的embedding
-        double[] queryVector = embeddingClient.embed(List.of(query)).get(0).stream()
-                .mapToDouble(Double::doubleValue).toArray();
+        // 计算query的embedding (Spring AI 1.1.x: float[] not List<Double>)
+        float[] queryVector = embeddingClient.embed(query);
 
         // 批量计算文档的embedding
-        List<String> docContents = docs.stream().map(Document::getContent).toList();
-        List<List<Double>> allDocEmbeddings = embeddingClient.embed(docContents);
+        List<String> docContents = docs.stream().map(Document::getText).toList();
+        List<float[]> allDocEmbeddings = embeddingClient.embed(docContents);
 
         // 计算每个文档的相似度分数
         List<DocumentWithScoreDTO> results = new ArrayList<>();
         for (int i = 0; i < docs.size(); i++) {
-            double[] docVector = allDocEmbeddings.get(i).stream().mapToDouble(Double::doubleValue).toArray();
+            float[] docVector = allDocEmbeddings.get(i);
             double similarity = cosineSimilarity(queryVector, docVector);
-            results.add(new DocumentWithScoreDTO(docs.get(i).getContent(), similarity));
+            results.add(new DocumentWithScoreDTO(docs.get(i).getText(), similarity));
         }
 
         // 按分数降序排序
@@ -164,9 +173,9 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     }
 
     /**
-     * 计算余弦相似度
+     * 计算余弦相似度 (float[] - Spring AI 1.1.x)
      */
-    private double cosineSimilarity(double[] vec1, double[] vec2) {
+    private double cosineSimilarity(float[] vec1, float[] vec2) {
         double dotProduct = 0.0;
         double norm1 = 0.0;
         double norm2 = 0.0;
@@ -186,11 +195,13 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
         for (String query : queries) {
             if (query.trim().isEmpty()) continue;
             String cleanQuery = query.replaceAll("^\\d+\\.\\s*", "").trim();
-            SearchRequest request = SearchRequest.query(cleanQuery)
-                    .withTopK(topK)
-                    .withFilterExpression("knowledge == '" + knowledgeTag + "' AND type == 'knowledge'");
+            SearchRequest request = SearchRequest.builder()
+                    .query(cleanQuery)
+                    .topK(topK)
+                    .filterExpression(SafeFilterBuilder.byKnowledgeAndType(knowledgeTag, "knowledge"))
+                    .build();
             List<Document> docs = vectorStore.similaritySearch(request);
-            allResults.addAll(docs.stream().map(Document::getContent).toList());
+            allResults.addAll(docs.stream().map(Document::getText).toList());
         }
 
         return allResults.stream().distinct().limit(topK).toList();
@@ -212,9 +223,7 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
         }
 
         // 批量 embedding 所有 queries（1次 API 调用）
-        List<double[]> queryEmbeddings = embeddingClient.embed(cleanQueries).stream()
-                .map(list -> list.stream().mapToDouble(Double::doubleValue).toArray())
-                .toList();
+        List<float[]> queryEmbeddings = embeddingClient.embed(cleanQueries);
 
         // 2. 每个 query 分别检索
         Map<String, List<Double>> docScoresMap = new LinkedHashMap<>();
@@ -222,22 +231,23 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
 
         for (int qi = 0; qi < cleanQueries.size(); qi++) {
             String cleanQuery = cleanQueries.get(qi);
-            double[] queryEmbedding = queryEmbeddings.get(qi);
+            float[] queryEmbedding = queryEmbeddings.get(qi);
 
-            SearchRequest request = SearchRequest.query(cleanQuery)
-                    .withTopK(topK)
-                    .withFilterExpression("knowledge == '" + knowledgeTag + "'");
+            SearchRequest request = SearchRequest.builder()
+                    .query(cleanQuery)
+                    .topK(topK)
+                    .filterExpression(SafeFilterBuilder.byKnowledge(knowledgeTag))
+                    .build();
             List<Document> docs = vectorStore.similaritySearch(request);
 
             for (Document doc : docs) {
-                String content = doc.getContent();
+                String content = doc.getText();
                 if (!docScoresMap.containsKey(content)) {
                     docScoresMap.put(content, new ArrayList<>());
                     uniqueDocContents.add(content);
                 }
                 // 计算该 query 与文档的余弦相似度
-                double[] docVector = embeddingClient.embed(List.of(content)).get(0).stream()
-                        .mapToDouble(Double::doubleValue).toArray();
+                float[] docVector = embeddingClient.embed(content);
                 double similarity = cosineSimilarity(queryEmbedding, docVector);
                 docScoresMap.get(content).add(similarity);
             }
@@ -277,30 +287,29 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
         }
 
         // 批量 embedding 所有 queries（1次 API 调用）
-        List<double[]> queryEmbeddings = embeddingClient.embed(cleanQueries).stream()
-                .map(list -> list.stream().mapToDouble(Double::doubleValue).toArray())
-                .toList();
+        List<float[]> queryEmbeddings = embeddingClient.embed(cleanQueries);
 
         // 2. 每个 query 分别检索（过滤：test_case + ADOPTED）
         Map<String, List<Double>> docScoresMap = new LinkedHashMap<>();
 
         for (int qi = 0; qi < cleanQueries.size(); qi++) {
             String cleanQuery = cleanQueries.get(qi);
-            double[] queryEmbedding = queryEmbeddings.get(qi);
+            float[] queryEmbedding = queryEmbeddings.get(qi);
 
-            SearchRequest request = SearchRequest.query(cleanQuery)
-                    .withTopK(topK)
-                    .withFilterExpression("knowledge == '" + ragTag + "' AND type == 'test_case' AND adoptionStatus == 'ADOPTED'");
+            SearchRequest request = SearchRequest.builder()
+                    .query(cleanQuery)
+                    .topK(topK)
+                    .filterExpression(SafeFilterBuilder.byKnowledgeTypeAdoptionStatus(ragTag, "test_case", "ADOPTED"))
+                    .build();
             List<Document> docs = vectorStore.similaritySearch(request);
 
             for (Document doc : docs) {
-                String content = doc.getContent();
+                String content = doc.getText();
                 if (!docScoresMap.containsKey(content)) {
                     docScoresMap.put(content, new ArrayList<>());
                 }
                 // 计算该 query 与文档的余弦相似度
-                double[] docVector = embeddingClient.embed(List.of(content)).get(0).stream()
-                        .mapToDouble(Double::doubleValue).toArray();
+                float[] docVector = embeddingClient.embed(content);
                 double similarity = cosineSimilarity(queryEmbedding, docVector);
                 docScoresMap.get(content).add(similarity);
             }
@@ -380,14 +389,16 @@ public class VectorStoreRepositoryImpl implements IVectorStoreRepository {
     public List<QueryKnowledgeResponse.KnowledgeDoc> queryKnowledgeDocsWithScore(String ragTag, String query, int topK) {
         log.info("语义检索知识库文档, ragTag: {}, query: {}, topK: {}", ragTag, query, topK);
 
-        SearchRequest request = SearchRequest.query(query)
-                .withTopK(topK)
-                .withFilterExpression("knowledge == '" + ragTag + "' AND type == 'knowledge'");
+        SearchRequest request = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .filterExpression(SafeFilterBuilder.byKnowledgeAndType(ragTag, "knowledge"))
+                .build();
         List<Document> docs = vectorStore.similaritySearch(request);
 
         return docs.stream().map(doc ->
                 QueryKnowledgeResponse.KnowledgeDoc.builder()
-                        .content(doc.getContent())
+                        .content(doc.getText())
                         .sourceDoc((String) doc.getMetadata().get("sourceDoc"))
                         .build()
         ).toList();

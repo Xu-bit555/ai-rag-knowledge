@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>登录 - OneCase Demo</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 360px; margin: 80px auto; padding: 24px; }
+        h1 { font-size: 20px; }
+        label { display: block; margin-top: 8px; font-size: 13px; color: #57606a; }
+        input[type=text], input[type=password] { width: 100%; padding: 8px; margin: 4px 0 12px; box-sizing: border-box; }
+        input:invalid { border-color: #d1242f; }
+        button { width: 100%; padding: 10px; background: #1f6feb; color: white; border: none; cursor: pointer; font-size: 14px; }
+        button:disabled { background: #999; cursor: not-allowed; }
+        .error { color: #d1242f; font-size: 13px; margin-bottom: 8px; padding: 6px; background: #ffebe9; border-radius: 3px; }
+        .demo-hint { color: #57606a; font-size: 12px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <h1>OneCase Demo 登录</h1>
+    <p th:if="${error}" id="errorMessage" class="error" th:text="${error}"></p>
+    <form method="post" action="/demo/login" id="loginForm">
+        <label for="username">用户名</label>
+        <input type="text" id="username" name="username" required minlength="1" placeholder="test">
+
+        <label for="password">密码</label>
+        <input type="password" id="password" name="password" required minlength="1" placeholder="test123">
+
+        <button type="submit" id="loginButton" th:text="${buttonText != null ? buttonText : '登录'}">登录</button>
+    </form>
+    <p class="demo-hint">演示账号: test / test123</p>
+</body>
+</html>

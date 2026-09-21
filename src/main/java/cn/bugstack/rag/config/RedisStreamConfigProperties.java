@@ -42,4 +42,14 @@ public class RedisStreamConfigProperties {
      */
     private String updateConsumer = "rag-update-consumer";
 
+    /**
+     * P0-9: 失败任务的 DLQ Stream key (Dead Letter Queue)
+     */
+    private String dlqStreamKey = "rag:ingest:dlq";
+
+    /**
+     * P0-9: 失败任务文件在 Redis 中的保留时长 (默认 7 天, 之前 24h 太短)
+     */
+    private int fileTtlHours = 168;
+
 }

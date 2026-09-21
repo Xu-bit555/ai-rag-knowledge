@@ -1,0 +1,90 @@
+# OneCase + Demo Web + Playwright MCP + PG + Redis
+# Phase 2.5+ 完整本地环境
+
+version: '3.8'
+
+services:
+
+  postgres:
+    image: pgvector/pgvector:v0.5.0
+    container_name: onecase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: onecase
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: onecase-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  onecase:
+    build: .
+    container_name: onecase-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/onecase
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_URL: redis://redis:6379
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
+      MINIMAX_MODEL: MiniMax-M3
+      SILICONFLOW_BASE_URL: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
+      JINA_API_KEY: ${JINA_API_KEY}
+      ARTIFACT_STORAGE_DIR: /onecase-artifacts
+    volumes:
+      - artifact-data:/onecase-artifacts
+
+  demo-web:
+    build: ./demo-web
+    container_name: onecase-demo-web
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      APP_DEMO_USERNAME: test
+      APP_DEMO_PASSWORD: test123
+      APP_DEMO_BUTTON_TEXT: 登录
+
+  playwright-mcp:
+    image: mcr.microsoft.com/playwright/mcp:v0.0.34
+    container_name: onecase-playwright-mcp
+    restart: unless-stopped
+    ports:
+      - "8931:8931"
+    command: ["node", "/app/index.js", "--port", "8931", "--headless", "--caps", "testing,devtools"]
+    volumes:
+      # Playwright 截图输出目录 - Agent runtime 需可访问
+      - playwright-output:/tmp/playwright-output
+    working_dir: /tmp/playwright-output
+
+volumes:
+  pgdata:
+  artifact-data:
+  playwright-output:

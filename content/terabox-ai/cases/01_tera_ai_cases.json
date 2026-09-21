@@ -1,0 +1,145 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-21T21:30:00Z",
+  "sourceRequirementRef": "prd/01_tera_ai_prd.md",
+  "summary": {
+    "app": "terabox-ai",
+    "page": "/ai/agent",
+    "totalCases": 6,
+    "testScope": "MVP smoke"
+  },
+  "cases": [
+    {
+      "caseId": "TC_AI_OK",
+      "title": "正常输入 prompt 并提交",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P0",
+      "risk": "HIGH",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": { "prompt": "什么是人工智能？" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" } },
+        { "order": 4, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" }, "value": "什么是人工智能？" },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "继续" } },
+        { "order": 6, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "继续" } }
+      ],
+      "expectedOutcome": "输入合法 prompt 后，点击「继续」应进入对话流并开始流式输出 AI 回复。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" } },
+        { "kind": "URL_CONTAINS", "expected": "/ai/agent" }
+      ]
+    },
+    {
+      "caseId": "TC_AI_EMPTY",
+      "title": "空输入时继续按钮应禁用",
+      "caseType": "EXCEPTION",
+      "designMethod": "BOUNDARY",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录或未登录"],
+      "testData": { "prompt": "" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" } },
+        { "order": 4, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "继续" } }
+      ],
+      "expectedOutcome": "输入框为空时，「继续」按钮应处于禁用（disabled）状态。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" } }
+      ]
+    },
+    {
+      "caseId": "TC_AI_EXAMPLE",
+      "title": "点击示例 prompt 自动填入输入框",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["页面已加载完毕"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "搜索猫和老鼠" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 1000 },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" } }
+      ],
+      "expectedOutcome": "点击「搜索猫和老鼠」示例后，该 prompt 应自动填入主输入框。",
+      "assertions": [
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" }, "expected": "搜索猫和老鼠" }
+      ]
+    },
+    {
+      "caseId": "TC_AI_REFRESH",
+      "title": "点击换一批刷新示例 prompt",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["页面已加载完毕"],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "搜索猫和老鼠" } },
+        { "order": 4, "action": "CLICK", "target": { "strategy": "TEXT", "text": "换一批" } },
+        { "order": 5, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「换一批」后，4 个示例 prompt 应被刷新为新一组（不包含原内容）。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "TEXT", "text": "换一批" } }
+      ]
+    },
+    {
+      "caseId": "TC_AI_BACK",
+      "title": "点击后退按钮返回 AI 主页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "后退" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「后退」后，URL 应变成 `/ai/index/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/index" }
+      ]
+    },
+    {
+      "caseId": "TC_AI_LONG_INPUT",
+      "title": "超长 prompt 输入框可正常接受",
+      "caseType": "BOUNDARY",
+      "designMethod": "BOUNDARY",
+      "priority": "P2",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": { "prompt_length": "2000" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/agent" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "搜索、创建或完成事项" }, "value": "请详细解释深度学习的工作原理。" },
+        { "order": 4, "action": "WAIT", "timeoutMs": 1000 },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "继续" } }
+      ],
+      "expectedOutcome": "输入较长 prompt 后，输入框应正常显示文本且「继续」按钮可点击。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "button", "name": "继续" } }
+      ]
+    }
+  ]
+}

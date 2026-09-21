@@ -1,0 +1,21 @@
+{
+  "comment": "Sample MCP client configuration for Multic Agent. DO NOT put real secrets here.",
+  "mcp_servers": [
+    {
+      "name": "onecase",
+      "type": "http",
+      "url": "${ONECASE_MCP_URL}",
+      "description": "OneCase - Test Intelligence Backend + MCP Server"
+    },
+    {
+      "name": "playwright",
+      "type": "http",
+      "url": "${PLAYWRIGHT_MCP_URL}",
+      "description": "Microsoft Playwright MCP - Browser automation"
+    }
+  ],
+  "environment": {
+    "ONECASE_MCP_URL": "http://localhost:8090/mcp",
+    "PLAYWRIGHT_MCP_URL": "http://localhost:8931/mcp"
+  }
+}

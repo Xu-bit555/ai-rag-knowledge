@@ -14,8 +14,9 @@ import cn.bugstack.rag.service.TestCaseService;
 import cn.bugstack.rag.service.ThinkStreamFilter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.openai.OpenAiChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ import java.util.List;
 
 /**
  * 测试用例服务实现
+ *
+ * Spring AI 1.1.x: 使用 ChatModel (不是 ChatClient)
  */
 @Slf4j
 @Service
@@ -40,7 +43,7 @@ public class TestCaseServiceImpl implements TestCaseService {
     private TestCaseGenerateService testCaseGenerateService;
 
     @Resource
-    private OpenAiChatClient chatClient;
+    private ChatModel chatModel;
 
     @Resource
     private IVectorStoreRepository vectorStoreRepository;
@@ -50,9 +53,6 @@ public class TestCaseServiceImpl implements TestCaseService {
 
     @Resource
     private ThinkStreamFilter thinkStreamFilter;
-
-    @Value("${spring.ai.minimax.model:MiniMax-M2.7}")
-    private String defaultModel;
 
     @Override
     public Flux<String> generateCasesStream(GenerateCasesRequest request) {
@@ -66,11 +66,9 @@ public class TestCaseServiceImpl implements TestCaseService {
                 List<String> scenarios = requirementExtractService.parseExtractedScenarios(extractedResult);
 
                 // 2. 分别检索 知识库文档 和 历史测试用例
-                // a. 知识库文档（检索时已过滤 type == 'knowledge'）
                 List<String> knowledgeDocs = vectorStoreRepository.similaritySearchWithDeduplication(
                         scenarios, request.getRagTag(), 5);
 
-                // b. 用例库检索：向量检索 → MMR → Rerank（仅查已采纳用例）
                 List<String> rerankedCases = rerankService.rerankTestCases(
                         request.getRagTag(), request.getContent(), 10);
 
@@ -116,7 +114,7 @@ public class TestCaseServiceImpl implements TestCaseService {
             ragTagRepository.addRagTag(ragTag);
             vectorStoreRepository.saveTestCases(ragTag, testCasesJson);
 
-            log.info("测试用例保存成功, ragTag: {}, 数量: {}", ragTag, testCasesJson.size());
+            log.info("测试用例保存成功, ragTag: {}, 数量: {}", testCasesJson.size());
             return Response.ok("测试用例保存成功");
         } catch (Exception e) {
             log.error("保存测试用例失败", e);
@@ -200,16 +198,17 @@ public class TestCaseServiceImpl implements TestCaseService {
         }
     }
 
+    /**
+     * Spring AI 1.1.x: ChatModel 流式调用
+     */
     private Flux<String> streamChat(String prompt) {
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
-                .withModel(defaultModel)
-                .build();
-        return chatClient.stream(new Prompt(prompt, options))
-                .filter(chatResponse -> chatResponse != null && chatResponse.getResult() != null
-                        && chatResponse.getResult().getOutput() != null
-                        && chatResponse.getResult().getOutput().getContent() != null)
-                .map(chatResponse -> chatResponse.getResult().getOutput().getContent())
-                .filter(s -> !s.isEmpty());
+        return chatModel.stream(new Prompt(prompt))
+                .map(ChatResponse::getResult)
+                .map(result -> {
+                    AssistantMessage msg = result.getOutput();
+                    return msg != null ? msg.getText() : "";
+                })
+                .filter(s -> s != null && !s.isEmpty());
     }
 
     private String stripThinkStream(String prompt) {

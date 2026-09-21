@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-21T21:30:00Z",
+  "sourceRequirementRef": "prd/03_video_generation_prd.md",
+  "summary": {
+    "app": "terabox-ai",
+    "page": "/ai/photo-to-video/chinese",
+    "totalCases": 6,
+    "testScope": "MVP smoke"
+  },
+  "cases": [
+    {
+      "caseId": "TC_VID_OK",
+      "title": "正常输入脚本后点击生成视频",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P0",
+      "risk": "HIGH",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox", "用户积分充足（推断 ≥ 20）"],
+      "testData": { "script": "展示一只小猫在花园里追逐蝴蝶" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "order": 4, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" }, "value": "展示一只小猫在花园里追逐蝴蝶" },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } },
+        { "order": 6, "action": "CLICK", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } },
+        { "order": 7, "action": "WAIT", "timeoutMs": 60000 }
+      ],
+      "expectedOutcome": "输入合法脚本后，点击「生成」应在 30s-3min 内生成 MP4 短视频并展示在结果区。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "TEXT", "text": "本次消耗" }, "expected": "本次消耗" }
+      ]
+    },
+    {
+      "caseId": "TC_VID_EMPTY",
+      "title": "空输入时生成按钮禁用",
+      "caseType": "EXCEPTION",
+      "designMethod": "BOUNDARY",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } },
+        { "order": 4, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } }
+      ],
+      "expectedOutcome": "输入框为空时，「生成」按钮应处于禁用状态。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" } }
+      ]
+    },
+    {
+      "caseId": "TC_VID_MODE_IMAGE",
+      "title": "切换到图片模式跳转到图片生成页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "图片" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 3000 }
+      ],
+      "expectedOutcome": "点击「图片」单选按钮后，页面导航到 `/ai/photo-to-photo/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/photo-to-photo" }
+      ]
+    },
+    {
+      "caseId": "TC_VID_BACK",
+      "title": "点击后退按钮返回 AI 主页",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P1",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "CLICK", "target": { "strategy": "TEXT", "text": "后退" } },
+        { "order": 4, "action": "WAIT", "timeoutMs": 2000 }
+      ],
+      "expectedOutcome": "点击「后退」后，URL 应变成 `/ai/index/chinese`。",
+      "assertions": [
+        { "kind": "URL_CONTAINS", "expected": "/ai/index" }
+      ]
+    },
+    {
+      "caseId": "TC_VID_LONG_SCRIPT",
+      "title": "超长脚本输入框可正常接受",
+      "caseType": "BOUNDARY",
+      "designMethod": "BOUNDARY",
+      "priority": "P2",
+      "risk": "MEDIUM",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": ["用户已登录 TeraBox"],
+      "testData": { "script_length": "500" },
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "INPUT", "target": { "strategy": "ROLE", "role": "textbox", "name": "描述你想生成的画面最多可上传 9 张图片作为参考" }, "value": "在春天阳光明媚的午后，一只橙色小猫在开满鲜花的花园里追逐五彩斑斓的蝴蝶，画面充满活力和温馨。" },
+        { "order": 4, "action": "WAIT", "timeoutMs": 1000 },
+        { "order": 5, "action": "ASSERT", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } }
+      ],
+      "expectedOutcome": "输入较长脚本后，输入框应正常显示且「生成」按钮可点击。",
+      "assertions": [
+        { "kind": "ELEMENT_VISIBLE", "target": { "strategy": "ROLE", "role": "button", "name": "生成" } }
+      ]
+    },
+    {
+      "caseId": "TC_VID_COST",
+      "title": "积分消耗提示显示",
+      "caseType": "FUNCTIONAL",
+      "designMethod": "EQUIVALENCE",
+      "priority": "P2",
+      "risk": "LOW",
+      "automationCandidate": "WEB_FUNCTIONAL",
+      "precondition": [],
+      "testData": {},
+      "steps": [
+        { "order": 1, "action": "NAVIGATE", "url": "https://www.terabox.com/ai/photo-to-video/chinese" },
+        { "order": 2, "action": "WAIT", "timeoutMs": 3000 },
+        { "order": 3, "action": "ASSERT", "target": { "strategy": "TEXT", "text": "本次消耗" } }
+      ],
+      "expectedOutcome": "页面应展示单次视频生成的积分消耗提示（具体数字可能不同于图片生成的 5 积分）。",
+      "assertions": [
+        { "kind": "TEXT_CONTAINS", "target": { "strategy": "TEXT", "text": "积分" }, "expected": "积分" }
+      ]
+    }
+  ]
+}

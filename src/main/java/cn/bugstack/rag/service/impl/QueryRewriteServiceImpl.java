@@ -3,10 +3,10 @@ package cn.bugstack.rag.service.impl;
 import cn.bugstack.rag.service.QueryRewriteService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.openai.OpenAiChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,11 +17,7 @@ import java.util.regex.Pattern;
 /**
  * Query Rewrite 服务实现
  *
- * 支持的策略：
- * 1. Direct Rewrite：直接重写为清晰、完整的查询
- * 2. PRD格式解析：提取"作为...我想要...以便于..."格式中的功能需求
- * 3. Multi-Query Expansion：扩展为多个不同角度的查询
- * 4. HyDE：生成假设性答案，用答案的向量辅助检索
+ * Spring AI 1.1.x: ChatModel (不是 ChatClient)
  */
 @Slf4j
 @Service
@@ -32,10 +28,7 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
     );
 
     @Resource
-    private OpenAiChatClient chatClient;
-
-    @Value("${spring.ai.minimax.model:MiniMax-M2.7}")
-    private String defaultModel;
+    private ChatModel chatModel;
 
     @Override
     public List<String> rewrite(String userQuery) {
@@ -46,7 +39,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
         String trimmed = userQuery.trim();
         log.info("Query Rewrite处理: {}", trimmed);
 
-        // 策略1：如果是PRD风格，先提取功能需求
         if (isPRDStyle(trimmed)) {
             List<String> prdQueries = extractFromPRD(trimmed);
             if (!prdQueries.isEmpty()) {
@@ -55,7 +47,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
             }
         }
 
-        // 策略2：短查询扩展（用户输入很简短时）
         if (trimmed.length() < 10) {
             List<String> expanded = expandShortQuery(trimmed);
             if (expanded.size() > 1) {
@@ -64,21 +55,18 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
             }
         }
 
-        // 策略3：多角度扩展
         List<String> multiQueries = multiQueryExpansion(trimmed);
         if (multiQueries.size() > 1) {
             log.info("多角度扩展为 {} 个查询", multiQueries.size());
             return multiQueries;
         }
 
-        // 默认返回原始查询（可能已重写）
         return List.of(trimmed);
     }
 
     @Override
     public String rewriteToSingle(String userQuery) {
         List<String> queries = rewrite(userQuery);
-        // 返回最短且最具体的一个
         return queries.stream()
                 .min((a, b) -> Integer.compare(a.length(), b.length()))
                 .orElse(userQuery);
@@ -89,13 +77,11 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
         if (query == null || query.isBlank()) {
             return false;
         }
-        // 检测PRD特征模式
         boolean hasAsRole = query.contains("作为") || query.contains("身为") || query.contains("作为管理员") ||
                            query.contains("作为用户") || query.contains("作为系统");
         boolean hasWant = query.contains("我想要") || query.contains("我希望") || query.contains("我想");
         boolean hasPurpose = query.contains("以便于") || query.contains("目的是") || query.contains("为了");
 
-        // PRD风格特征：同时包含"作为"和"想要"
         return hasAsRole && hasWant;
     }
 
@@ -104,19 +90,16 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
         List<String> extracted = new ArrayList<>();
 
         try {
-            // 方法1：正则提取关键功能描述
             Matcher matcher = PRD_PATTERN.matcher(prdQuery);
             StringBuffer sb = new StringBuffer();
             while (matcher.find()) {
                 String segment = matcher.group();
-                // 清理标点
                 segment = segment.replaceAll("[，,。]", "").trim();
                 if (segment.length() > 2) {
                     extracted.add(segment);
                 }
             }
 
-            // 方法2：提取"我想要"后面的核心动作
             Pattern wantPattern = Pattern.compile("我想要(.{2,20}?)(?:以便于|为了|$)");
             Matcher wantMatcher = wantPattern.matcher(prdQuery);
             while (wantMatcher.find()) {
@@ -126,7 +109,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                 }
             }
 
-            // 方法3：使用LLM提取功能关键词（简单提示）
             if (extracted.isEmpty()) {
                 String keywords = extractKeywordsWithLLM(prdQuery);
                 if (keywords != null && !keywords.isBlank()) {
@@ -139,7 +121,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                 }
             }
 
-            // 去重并清理
             List<String> result = extracted.stream().distinct().toList();
             log.debug("从PRD提取的功能点: {}", result);
 
@@ -163,41 +144,21 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                     3. 答案应该包含具体的操作步骤或技术细节
                     """, userQuery);
 
-            StringBuilder answer = new StringBuilder();
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
-                    .withModel(defaultModel)
-                    .build();
-
-            chatClient.stream(new Prompt(prompt, options))
-                    .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null
-                                && chunk.getResult().getOutput() != null
-                                && chunk.getResult().getOutput().getContent() != null) {
-                            answer.append(chunk.getResult().getOutput().getContent());
-                        }
-                    });
-
-            // 等待生成完成
-            Thread.sleep(1500);
-
-            String result = answer.toString().trim();
+            String answer = simpleCall(prompt);
+            String result = answer != null ? answer.trim() : userQuery;
             log.info("HyDE生成假设答案: {}", result.length() > 50 ? result.substring(0, 50) + "..." : result);
             return result;
 
         } catch (Exception e) {
             log.warn("HyDE答案生成失败: {}", userQuery, e);
-            return userQuery; // 降级为原始查询
+            return userQuery;
         }
     }
 
-    /**
-     * 短查询扩展策略
-     */
     private List<String> expandShortQuery(String shortQuery) {
         List<String> expansions = new ArrayList<>();
         expansions.add(shortQuery);
 
-        // 根据短查询的特点进行扩展
         String lower = shortQuery.toLowerCase();
 
         if (lower.contains("退") || lower.contains("退款") || lower.contains("退货")) {
@@ -218,7 +179,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
             expansions.add("搜索筛选操作流程");
         }
 
-        // 如果扩展后仍然只有1个，说明无法扩展
         if (expansions.size() == 1) {
             return expansions;
         }
@@ -226,14 +186,10 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
         return expansions.stream().distinct().toList();
     }
 
-    /**
-     * 多角度查询扩展
-     */
     private List<String> multiQueryExpansion(String query) {
         List<String> queries = new ArrayList<>();
         queries.add(query);
 
-        // 添加不同角度的变体
         String prompt = String.format("""
                 为以下查询生成3个不同角度的检索变体，每个变体不超过20字：
                 原始查询：%s
@@ -246,27 +202,14 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                 """, query);
 
         try {
-            StringBuilder response = new StringBuilder();
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
-                    .withModel(defaultModel)
-                    .build();
+            String response = simpleCall(prompt);
 
-            chatClient.stream(new Prompt(prompt, options))
-                    .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null
-                                && chunk.getResult().getOutput() != null
-                                && chunk.getResult().getOutput().getContent() != null) {
-                            response.append(chunk.getResult().getOutput().getContent());
-                        }
-                    });
-
-            Thread.sleep(1000);
-
-            String result = response.toString();
-            for (String line : result.split("\n")) {
-                line = line.trim().replaceAll("^[0-9a-zA-Z[\\]()。,、]+[.、]?", "");
-                if (!line.isEmpty() && line.length() > 3) {
-                    queries.add(line);
+            if (response != null) {
+                for (String line : response.split("\n")) {
+                    line = line.trim().replaceAll("^[0-9a-zA-Z[\\]()。,、]+[.、]?", "");
+                    if (!line.isEmpty() && line.length() > 3) {
+                        queries.add(line);
+                    }
                 }
             }
 
@@ -277,9 +220,6 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
         return queries.stream().distinct().limit(5).toList();
     }
 
-    /**
-     * 使用LLM从PRD中提取关键词
-     */
     private String extractKeywordsWithLLM(String prdQuery) {
         try {
             String prompt = String.format("""
@@ -289,27 +229,18 @@ public class QueryRewriteServiceImpl implements QueryRewriteService {
                     要求：只输出关键词，用逗号分隔，不要解释
                     """, prdQuery);
 
-            StringBuilder keywords = new StringBuilder();
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
-                    .withModel(defaultModel)
-                    .build();
-
-            chatClient.stream(new Prompt(prompt, options))
-                    .subscribe(chunk -> {
-                        if (chunk != null && chunk.getResult() != null
-                                && chunk.getResult().getOutput() != null
-                                && chunk.getResult().getOutput().getContent() != null) {
-                            keywords.append(chunk.getResult().getOutput().getContent());
-                        }
-                    });
-
-            Thread.sleep(1000);
-
-            return keywords.toString().trim();
+            String keywords = simpleCall(prompt);
+            return keywords != null ? keywords.trim() : null;
 
         } catch (Exception e) {
             log.warn("LLM关键词提取失败: {}", prdQuery, e);
             return null;
         }
+    }
+
+    private String simpleCall(String prompt) {
+        ChatResponse response = chatModel.call(new Prompt(prompt));
+        AssistantMessage msg = response.getResult().getOutput();
+        return msg != null ? msg.getText() : null;
     }
 }

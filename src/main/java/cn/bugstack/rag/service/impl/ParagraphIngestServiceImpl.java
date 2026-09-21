@@ -64,13 +64,12 @@ public class ParagraphIngestServiceImpl implements cn.bugstack.rag.service.Parag
 
     private TokenTextSplitter createTokenTextSplitter() {
         cn.bugstack.rag.service.SplitterConfigService.SplitterConfig config = splitterConfigService.getConfig();
-        return new TokenTextSplitter(
-                config.getMaxTokens(),
-                config.getMinChunkLengthToEmbed(),
-                config.getOverlapTokens(),
-                config.getMinTokens(),
-                config.isKeepSeparator()
-        );
+        return TokenTextSplitter.builder()
+                .withChunkSize(config.getMaxTokens())
+                .withMinChunkLengthToEmbed(config.getMinChunkLengthToEmbed())
+                .withMinChunkSizeChars(config.getMinTokens())
+                .withKeepSeparator(config.isKeepSeparator())
+                .build();
     }
 
     @lombok.Data
