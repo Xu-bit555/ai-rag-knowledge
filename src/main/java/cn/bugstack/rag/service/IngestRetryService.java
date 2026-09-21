@@ -8,8 +8,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 /**
  * P0-9: 摄入任务重试服务 - 从 DLQ 回放到主 stream
@@ -55,17 +58,22 @@ public class IngestRetryService {
 
     /**
      * 批量重试 DLQ 中的所有任务 (单次最多 100 条)
+     *
+     * P0-9 fixup: Redisson 3.25.2 移除了 entryRange(int, int),
+     *   改用 range(int count, StreamMessageId start, StreamMessageId end)
      */
     public Response<Integer> retryAll() {
         RStream<String, String> dlq = redissonClient.getStream(streamConfig.getDlqStreamKey());
         int count = 0;
-        for (var entry : dlq.entryRange(0, 100)) {
-            String taskId = entry.getValue().get("taskId");
+        for (var e : dlq.range(100, StreamMessageId.MIN, StreamMessageId.MAX).entrySet()) {
+            StreamMessageId id = e.getKey();
+            Map<String, String> values = e.getValue();
+            String taskId = values.get("taskId");
             if (taskId != null) {
                 Response<String> r = retry(taskId);
                 if ("200".equals(r.getCode())) {
                     count++;
-                    dlq.remove(entry.getId());
+                    dlq.remove(id);
                 }
             }
         }

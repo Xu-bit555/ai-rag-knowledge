@@ -74,6 +74,9 @@ public class TestCaseRepositoryImpl implements TestCaseRepositoryPort {
 
         // 2. P0-1: 同事务内镜像到 spring_ai_vectors(type=test_case, adoptionStatus=ADOPTED)
         //    供 RerankServiceImpl.rerankTestCases 历史召回使用
+        //
+        // 重要: spring_ai_vectors.id 是 uuid 类型, 必须用 UUID.randomUUID() 作为 Document.id.
+        //   原 caseId (字符串如 "TC_AI_OK_ccce0f94") 放 metadata.caseId, 用于关联回 rag_test_case.
         Map<String, Object> vectorMeta = new HashMap<>();
         vectorMeta.put("knowledge", ragTag);
         vectorMeta.put("type", "test_case");
@@ -83,7 +86,8 @@ public class TestCaseRepositoryImpl implements TestCaseRepositoryPort {
 
         String embeddingText = title + "\n"
                 + (caseEntity.getExpectedOutcome() != null ? caseEntity.getExpectedOutcome() : "");
-        Document doc = new Document(stableId, embeddingText, vectorMeta);
+        // 用 UUID 作 Document.id (满足 spring_ai_vectors.id 的 uuid 类型约束)
+        Document doc = new Document(UUID.randomUUID().toString(), embeddingText, vectorMeta);
         try {
             vectorStore.accept(List.of(doc));
         } catch (Exception e) {

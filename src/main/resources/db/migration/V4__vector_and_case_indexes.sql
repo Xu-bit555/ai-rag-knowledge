@@ -11,9 +11,13 @@
 
 -- ─────────────────────────────────────────────────────────────
 -- 1. spring_ai_vectors.metadata GIN 索引
+--
+-- 注意: Spring AI 自动建的 spring_ai_vectors.metadata 列是 json (非 jsonb),
+--   jsonb_path_ops 只支持 jsonb. 索引表达式里显式 cast 一次,
+--   存储翻倍但语义等价, 不影响其它 4 个索引.
 -- ─────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_spring_ai_vectors_metadata_gin
-    ON spring_ai_vectors USING GIN (metadata jsonb_path_ops);
+    ON spring_ai_vectors USING GIN ((metadata::jsonb) jsonb_path_ops);
 
 -- knowledge + type 组合的部分索引（最常见的双字段过滤）
 CREATE INDEX IF NOT EXISTS idx_spring_ai_vectors_knowledge_type

@@ -77,9 +77,10 @@ public class DslValidator {
             JsonNode jsonNode = objectMapper.readTree(dslJson);
             List<Error> schemaErrors = jsonSchema.validate(jsonNode);
             for (Error err : schemaErrors) {
+                // P0-4 fixup: networknt 2.0 改名 getType() → getKeyword()
                 errors.add(new FieldError(
                         pointerFromInstanceLocation(err.getInstanceLocation()),
-                        "SCHEMA_" + err.getType(),
+                        "SCHEMA_" + err.getKeyword(),
                         err.getMessage()));
             }
         } catch (Exception e) {
