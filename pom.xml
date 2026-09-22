@@ -121,11 +121,13 @@
             <version>3.25.2</version>
         </dependency>
 
-        <!-- Phase 2 R5: jtokkit - BPE tokenizer (更准确的 token 估算, 替代中文 0.5 / 英文 1.25 启发式) -->
+        <!-- Phase 2 R5: jtokkit - BPE tokenizer (更准确的 token 估算, 替代中文 0.5 / 英文 1.25 启发式)
+             Phase 4 Bug E: 1.1.0 匹配 Spring AI 1.1.8 TokenTextSplitter 调用的 Encoding.encode(String):IntArrayList
+             0.6.1 的 encode 返回 List<Integer>，与 Spring AI 1.1.x 不兼容 → document-ingest-consumer NoSuchMethodError -->
         <dependency>
             <groupId>com.knuddels</groupId>
             <artifactId>jtokkit</artifactId>
-            <version>0.6.1</version>
+            <version>1.1.0</version>
         </dependency>
 
         <!-- FastJSON2 -->
