@@ -71,6 +71,15 @@ public class DiagnoseFailureUseCase {
         log.debug("LLM diagnosis response length: {}", raw.length());
 
         ParsedDiagnosis parsed = parseDiagnosis(raw);
+        // Bug G fix: raw LLM 输出含 markdown ``` 反引号, 直接 INSERT ?::jsonb 报
+        //   "Token "`" is invalid". 改为把整段 raw 包成 JSON 字符串 {"raw": "<text>"},
+        //   JSON encoder 自动转义反引号/换行, 保证入库合法 JSON.
+        String rawAsJson;
+        try {
+            rawAsJson = objectMapper.writeValueAsString(Map.of("raw", raw));
+        } catch (Exception e) {
+            rawAsJson = "{\"raw\":\"<serialize-failed>\"}";
+        }
         return failureDiagnosisRepository.insert(
                 runId, caseId, attemptId,
                 parsed.category,
@@ -78,7 +87,7 @@ public class DiagnoseFailureUseCase {
                 parsed.rootCause,
                 parsed.confidence,
                 parsed.suggestedRecovery,
-                raw);
+                rawAsJson);
     }
 
     private String buildPrompt(String caseId, CaseAttempt attempt, String failureContext) {
