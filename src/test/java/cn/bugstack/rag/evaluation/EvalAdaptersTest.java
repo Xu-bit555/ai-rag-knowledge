@@ -51,8 +51,8 @@ class EvalAdaptersTest {
             assertEquals("text-C", first.candidateId() != null ? firstTextByScore(out) : null,
                     "第一应为 relevance 最高 (text-C=0.95)");
             // 验证 score 透传
-            assertEquals(0.95, out.scores().get(textIdFor("text-C")), 0.001);
-            assertEquals(0.80, out.scores().get(textIdFor("text-A")), 0.001);
+            assertEquals(0.95, out.scoresByCandidateId().get(textIdFor("text-C")), 0.001);
+            assertEquals(0.80, out.scoresByCandidateId().get(textIdFor("text-A")), 0.001);
         } finally {
             server.stop(0);
         }
@@ -63,7 +63,7 @@ class EvalAdaptersTest {
     }
 
     private static String firstTextByScore(RerankOutput out) {
-        return out.scores().entrySet().stream()
+        return out.scoresByCandidateId().entrySet().stream()
                 .max(java.util.Map.Entry.comparingByValue())
                 .map(java.util.Map.Entry::getKey)
                 .orElse(null);
