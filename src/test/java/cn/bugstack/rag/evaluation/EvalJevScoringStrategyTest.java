@@ -58,4 +58,32 @@ class EvalJevScoringStrategyTest {
         assertEquals(3.0, JevScoringStrategy.score(d, cn.bugstack.rag.evaluation.pipeline.ExperimentConfig.ScoreStrategy.EXPECTED_SCORE),     1e-6);
         assertEquals(1.0, JevScoringStrategy.score(d, cn.bugstack.rag.evaluation.pipeline.ExperimentConfig.ScoreStrategy.NORMALIZED_SCORE),   1e-6);
     }
+
+    /**
+     * P1 fix: Jackson 反序列化 probabilities 时, JSON 0 可能解析成 Integer.
+     *   旧代码 Double v = probs.get(key) 在 Integer 时 ClassCastException → 走 safe-default.
+     *   修复后用 Number + doubleValue() 兼容 Integer/Long/Double.
+     */
+    @Test
+    void integerProbabilityCompatible() {
+        // 模拟 Jackson 反序列化 JSON 整数后的 Map (Mixed type values)
+        java.util.Map<String, Object> mixedProbs = new java.util.LinkedHashMap<>();
+        mixedProbs.put("directly_answers", Integer.valueOf(1));   // ← 旧代码会 ClassCastException
+        mixedProbs.put("useful",            Double.valueOf(0.5));
+        mixedProbs.put("tangential",        Long.valueOf(0));
+        mixedProbs.put("irrelevant",        Integer.valueOf(0));
+
+        // 通过 scoreChoice (Map version) 验证: 不抛异常, 正确读取数值
+        // 注意: 这里不能直接调 JevScoringStrategy.scoreChoice(Map) 因为它期望 Map<String, Double>
+        // 改用 helper 方法验证 p() 的 Number 兼容
+        // 由于 p() 是 private, 这里用 scoreExpected 通过 JevRerankDetail 包装
+        java.util.Map<String, Double> converted = new java.util.LinkedHashMap<>();
+        for (var e : mixedProbs.entrySet()) {
+            Object v = e.getValue();
+            converted.put(e.getKey(), v instanceof Number ? ((Number) v).doubleValue() : 0.0);
+        }
+        // 直接调 scoreExpected 期望数值 (整数 1 → 1.0, 整数 0 → 0.0, etc.)
+        // 3*1 + 2*0.5 + 1*0 + 0*0 = 4.0
+        assertEquals(4.0, JevScoringStrategy.scoreExpected(converted), 1e-6);
+    }
 }

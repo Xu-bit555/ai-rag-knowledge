@@ -46,8 +46,13 @@ public final class JevScoringStrategy {
     }
 
     private static double p(Map<String, Double> probs, String key) {
-        Double v = probs.get(key);
-        return v == null ? 0.0 : v;
+        // P1 fix: Jackson 反序列化 probabilities 时, JSON 数字类型决定 Java 类型
+        //   0.6 → Double, 1 → Integer. 之前用 Double v = probs.get(key) 在 Integer 时 ClassCastException.
+        //   改用 Number + doubleValue() 兼容两种类型 (Integer/Double/Long 都 OK).
+        Object raw = probs.get(key);
+        if (raw == null) return 0.0;
+        if (raw instanceof Number) return ((Number) raw).doubleValue();
+        return 0.0;   // 非数字类型 fallback
     }
 
     public static double score(JevRerankDetail d, cn.bugstack.rag.evaluation.pipeline.ExperimentConfig.ScoreStrategy strategy) {

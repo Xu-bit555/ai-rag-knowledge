@@ -111,6 +111,17 @@ public final class JinaRerankAdapter implements Reranker {
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> results = (List<Map<String, Object>>) resultsObj;
+
+            // P1 fix: 用 index 字段定位 candidate, 不再依赖 document.text
+            //   Jina API v1+ 实际只返回 {index, relevance_score}, document 字段被砍掉 (避免大 payload).
+            //   旧代码假设 document 是 Map 含 text 子字段 → 全部 continue 跳过 → 走 degrade = NoOp
+            //   新代码: 优先用 index 字段 (新版), 兼容 document.text (旧版)
+            //   用 candidateId 索引保证 O(1) 查找
+            java.util.Map<Integer, RetrievalCandidate> byIndex = new java.util.HashMap<>();
+            for (int i = 0; i < candidates.size(); i++) {
+                byIndex.put(i, candidates.get(i));
+            }
+
             List<RankedItem> ranking = new ArrayList<>();
             Map<String, Double> scores = new HashMap<>();
             // 先把所有 candidate 的默认 score 填上（防止 Jina 没返回的 doc 缺失）
@@ -119,13 +130,29 @@ public final class JinaRerankAdapter implements Reranker {
             }
             int idx = 0;
             for (Map<String, Object> result : results) {
-                Object docObj = result.get("document");
                 Object scoreObj = result.get("relevance_score");
-                if (!(docObj instanceof Map) || !(scoreObj instanceof Number)) continue;
-                String text = (String) ((Map<String, Object>) docObj).get("text");
-                if (text == null) continue;
-                RetrievalCandidate c = byText.get(text);
+                if (!(scoreObj instanceof Number)) continue;
+
+                RetrievalCandidate c = null;
+
+                // 优先用 index 字段 (Jina v1+ 标准)
+                Object indexObj = result.get("index");
+                if (indexObj instanceof Number) {
+                    int docIndex = ((Number) indexObj).intValue();
+                    c = byIndex.get(docIndex);
+                }
+
+                // 兼容旧版: document.text 字段
+                if (c == null) {
+                    Object docObj = result.get("document");
+                    if (docObj instanceof Map) {
+                        String text = (String) ((Map<String, Object>) docObj).get("text");
+                        if (text != null) c = byText.get(text);
+                    }
+                }
+
                 if (c == null) continue;
+
                 double score = ((Number) scoreObj).doubleValue();
                 scores.put(c.candidateId(), score);
                 int newRank = ++idx;

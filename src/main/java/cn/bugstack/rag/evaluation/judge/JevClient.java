@@ -188,9 +188,24 @@ public final class JevClient {
             throw new JevClientException("Response missing 'answers.relevance' field");
         }
         String choice = (String) relevance.get("choice");
-        Map<String, Double> probs = (Map<String, Double>) relevance.get("probabilities");
+        // P1 fix: 不要 unchecked cast 成 Map<String, Double> — Jackson 可能把数字反序列化成 Integer.
+        //   逐个 value 转 Number → doubleValue, 兼容 Integer/Long/Double.
+        Object rawProbs = relevance.get("probabilities");
+        Map<String, Double> probs = new LinkedHashMap<>();
+        if (rawProbs instanceof Map) {
+            for (Map.Entry<String, Object> e : ((Map<String, Object>) rawProbs).entrySet()) {
+                Object v = e.getValue();
+                if (v instanceof Number) {
+                    probs.put(e.getKey(), ((Number) v).doubleValue());
+                } else {
+                    probs.put(e.getKey(), 0.0);
+                }
+            }
+        }
         if (choice == null) throw new JevClientException("Missing 'choice'");
-        if (probs  == null) throw new JevClientException("Missing 'probabilities'");
+        if (probs.isEmpty() && !(rawProbs instanceof Map)) {
+            throw new JevClientException("Missing 'probabilities'");
+        }
 
         double confidence = 0.0;
         // TypeSafe direct HTTP API: provider_metadata (snake_case)
