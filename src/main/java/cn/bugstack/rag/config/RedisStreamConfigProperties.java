@@ -52,4 +52,31 @@ public class RedisStreamConfigProperties {
      */
     private int fileTtlHours = 168;
 
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3: 向量镜像专用 stream 配置 (test_case 双写拆异步)
+    //   adopt → VectorMirrorDispatcher → rag:vector:mirror → VectorMirrorConsumer → spring_ai_vectors
+    //   失败 3 次 → rag:vector:dlq → 人工 retry
+    // ─────────────────────────────────────────────────────────────
+
+    /** 向量镜像任务 stream key */
+    private String vectorMirrorStreamKey = "rag:vector:mirror";
+
+    /** 向量镜像 DLQ stream key (consumer 重试耗尽后入此, 供手动 retry) */
+    private String vectorDlqStreamKey = "rag:vector:dlq";
+
+    /** 向量镜像 consumer group */
+    private String vectorMirrorGroup = "rag-vector-mirror-group";
+
+    /** 向量镜像 consumer 名称 */
+    private String vectorMirrorConsumer = "rag-vector-mirror-consumer";
+
+    /** consumer 内最大重试次数 (失败后入 DLQ) */
+    private int vectorMaxRetry = 3;
+
+    /** 重试退避基数 (ms): 第 N 次失败等 N * baseBackoff */
+    private long vectorRetryBackoffMs = 1000L;
+
+    /** consumer 内嵌入 API 并发限流 (Semaphore permits) */
+    private int vectorDispatchConcurrency = 4;
+
 }

@@ -70,21 +70,32 @@ public class AdoptCasesUseCase {
                     e);
         }
 
-        // 2. 写入 rag_test_case (任一抛 RuntimeException → 整体 rollback)
+        // 2. 逐条 adopt (Phase 3: best-effort, 单条失败不阻塞其他)
+        //    P0-8 已放宽为 best-effort: 单条失败仅记 error, 不影响其他 case.
         List<String> caseIds = new ArrayList<>();
+        int failCount = 0;
         for (TestCaseEntity tc : dsl.getCases()) {
-            String stableId = testCaseRepository.adopt(ragTag, tc);
-            caseIds.add(stableId);
+            try {
+                String stableId = testCaseRepository.adopt(ragTag, tc);
+                caseIds.add(stableId);
+            } catch (Exception e) {
+                failCount++;
+                log.error("Adopt failed for case={}, ragTag={} (continue 历轮): {}",
+                        tc.getCaseId(), ragTag, e.getMessage(), e);
+                caseIds.add(null);   // 占位, 调用方按 null 识别失败
+            }
         }
 
-        log.info("Adopted {} cases for ragTag={} (transactional)", caseIds.size(), ragTag);
+        log.info("Adopted {} cases for ragTag={} (failed={}, fire-and-forget vector)",
+                caseIds.size() - failCount, ragTag, failCount);
         return caseIds;
     }
 
     /**
      * 采纳单个 Case (供单独 MCP Tool 调用)
+     *
+     * Phase 3: 去掉 @Transactional (Repo 内部 REQUIRES_NEW 独立事务)
      */
-    @Transactional(rollbackFor = Exception.class)
     public String executeSingle(String ragTag, TestCaseEntity caseEntity) {
         try {
             String json = objectMapper.writeValueAsString(caseEntity);

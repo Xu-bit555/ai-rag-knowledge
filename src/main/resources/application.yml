@@ -41,6 +41,14 @@ spring:
         stream-key: rag:ingest:stream
         group: rag-ingest-group
         consumer: rag-ingest-consumer
+        # Phase 3: 向量镜像异步双写配置
+        vector-mirror-stream-key: rag:vector:mirror
+        vector-dlq-stream-key: rag:vector:dlq
+        vector-mirror-group: rag-vector-mirror-group
+        vector-mirror-consumer: rag-vector-mirror-consumer
+        vector-max-retry: 3
+        vector-retry-backoff-ms: 1000
+        vector-dispatch-concurrency: 4
 
     # Embedding模型配置
     embedding:

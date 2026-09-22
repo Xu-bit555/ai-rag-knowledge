@@ -9,11 +9,17 @@ import java.util.Optional;
  * TestCase 仓储端口
  *
  * Phase 1.5/2: rag_test_case 表结构化存储,逐步替换 pgvector raw JSON 方案。
+ *
+ * Phase 3: 拆异步双写 - adopt() / adoptAll() 内部 @Transactional(REQUIRES_NEW)
+ *   独立提交结构表; 向量镜像派发 fire-and-forget, 由 VectorMirrorDispatcher 异步处理.
  */
 public interface TestCaseRepositoryPort {
 
     /**
-     * Adopt 一个 Case: 分配稳定 caseId (UUID 后缀) + 写入 rag_test_case
+     * Adopt 一个 Case: 分配稳定 caseId (UUID 后缀) + 写入 rag_test_case + 异步派发向量镜像.
+     *
+     * Phase 3 语义: 返回 stableId 时, 结构表已 commit; 向量镜像可能仍在派发/处理中.
+     *   业务方可通过 AdoptCasesTool 返回的 vectorSyncStatus 字段判断镜像状态.
      *
      * @param ragTag 知识库标签
      * @param caseEntity LLM 生成的 case(可能缺 caseId)

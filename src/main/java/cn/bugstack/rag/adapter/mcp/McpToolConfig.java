@@ -9,6 +9,7 @@ import cn.bugstack.rag.adapter.mcp.tool.RecordCaseAttemptTool;
 import cn.bugstack.rag.adapter.mcp.tool.SearchKnowledgeTool;
 import cn.bugstack.rag.adapter.mcp.tool.SearchTestCasesTool;
 import cn.bugstack.rag.adapter.mcp.tool.ValidateCaseTool;
+import cn.bugstack.rag.adapter.mcp.tool.VectorMirrorTool;   // Phase 3
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -72,9 +73,10 @@ public class McpToolConfig {
             CreateTestRunTool createTestRunTool,
             RecordCaseAttemptTool recordCaseAttemptTool,
             DiagnoseFailureTool diagnoseFailureTool,
-            GetTestRunTool getTestRunTool) {
+            GetTestRunTool getTestRunTool,
+            VectorMirrorTool vectorMirrorTool) {       // Phase 3
 
-        log.info("注册 MCP 工具: 11 个 (2 基础 + 9 业务)");
+        log.info("注册 MCP 工具: 13 个 (2 基础 + 9 业务 + 2 镜像管理)");
         return MethodToolCallbackProvider.builder()
                 .toolObjects(
                         mcpPingTool,
@@ -86,7 +88,8 @@ public class McpToolConfig {
                         createTestRunTool,
                         recordCaseAttemptTool,
                         diagnoseFailureTool,
-                        getTestRunTool
+                        getTestRunTool,
+                        vectorMirrorTool                // Phase 3
                 )
                 .build();
     }

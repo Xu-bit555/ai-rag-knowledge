@@ -6,11 +6,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
@@ -18,22 +17,25 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * TestCase 仓储实现 - JdbcTemplate + PostgreSQL JSONB
  *
- * P0-1 修复: adopt() 同事务内镜像写入 spring_ai_vectors(type=test_case, adoptionStatus=ADOPTED),
- *   解决 RerankServiceImpl 历史召回永久为空的双源真相分裂 bug.
+ * Phase 1/2: 结构表 + 向量表同事务双写 (P0-1 双源真相分裂修复)
  *
- * Phase 2 修复:
- *   D1 - 删除 saveRawDsl() no-op 方法
- *   D7 - adoptAll 用 batchUpdate 替代循环单条 INSERT (结构表)
- *   L7 - UUID 改 36 字符全长 (原 substring(0,8) 仅 ~20 位熵, 千万级 caseId 有碰撞风险)
+ * Phase 3: 拆异步双写. adopt() 内部 @Transactional(REQUIRES_NEW) 控制结构表 INSERT 独立事务.
+ *   向量镜像改 fire-and-forget 派发到 rag:vector:mirror stream, 由 VectorMirrorConsumer 异步消费.
+ *   这样 embedding API 抖动不再阻断 adopt 业务路径 (P0-12 fail-fast 与 P0-1 强一致的矛盾解).
+ *
+ * 修复历史:
+ *   P0-1 - 双源真相分裂 (原同事务双写, Phase 1)
+ *   D1 - 删除 saveRawDsl() no-op 方法 (Phase 2)
+ *   D7 - adoptAll 用 batchUpdate 替代循环单条 INSERT (Phase 2)
+ *   L7 - UUID 改 36 字符全长 (Phase 2)
+ *   Phase 3 - 拆异步双写: 结构表独立事务 + 向量镜像 fire-and-forget
  */
 @Slf4j
 @Repository
@@ -47,22 +49,23 @@ public class TestCaseRepositoryImpl implements TestCaseRepositoryPort {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
-    private final VectorStore vectorStore;
+    private final VectorMirrorDispatcher vectorMirrorDispatcher;
 
     /**
-     * 单条 adopt - P0-1 双写保持事务性 (结构表 + 向量表)
+     * 单条 adopt - Phase 3 拆异步双写
      *
-     * P0-1: 同事务内 INSERT rag_test_case + vectorStore.accept() 镜像到 spring_ai_vectors
-     * L7: UUID 36 字符全长 (P0 阶段已改为 UUID.randomUUID() 但还在 substring(0,8))
+     * 事务边界: @Transactional(REQUIRES_NEW) - 强制开新事务, 不受外层事务影响.
+     *   - 结构表 INSERT 在事务内, commit 后立即返回 stableId
+     *   - 向量镜像调用 dispatcher.dispatch() (fire-and-forget, 不抛异常)
+     *   - 即使 dispatcher 抛 RuntimeException, 也只 log warn 不影响事务提交
      */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String adopt(String ragTag, TestCaseEntity caseEntity) {
         String baseId = caseEntity.getCaseId() != null ? caseEntity.getCaseId() : "TC_AUTO";
-        // L7: UUID 36 字符全长, 替代 substring(0, 8)
         String stableId = baseId + "_" + UUID.randomUUID().toString();
 
-        // 写结构表
+        // 1. 结构表 INSERT (单条事务)
         jdbcTemplate.update(INSERT_SQL, ps -> {
             ps.setString(1, stableId);
             ps.setString(2, ragTag);
@@ -80,27 +83,32 @@ public class TestCaseRepositoryImpl implements TestCaseRepositoryPort {
             ps.setTimestamp(9, Timestamp.from(Instant.now()));
         });
 
-        // 镜像到 spring_ai_vectors (事务内, 失败整体回滚)
-        mirrorToVectorStore(ragTag, stableId, caseEntity);
+        // 2. Phase 3: 异步派发向量镜像 (fire-and-forget, 不抛异常)
+        try {
+            vectorMirrorDispatcher.dispatch(ragTag, stableId, caseEntity);
+        } catch (Exception e) {
+            log.warn("Vector mirror dispatch threw (swallow): ragTag={}, stableId={}",
+                    ragTag, stableId, e);
+        }
 
-        log.info("Adopted test case (with vector mirror): ragTag={}, stableId={}", ragTag, stableId);
+        log.info("Adopted test case (fire-and-forget vector): ragTag={}, stableId={}", ragTag, stableId);
         return stableId;
     }
 
     /**
-     * 批量 adopt - D7: 用 batchUpdate 替代循环单条 INSERT
+     * 批量 adopt - Phase 3 拆异步双写
      *
-     * 注意: 结构表 batch 一次提交, 但向量表仍按 case 循环 (PgVectorStore 不接受 batch),
-     *   任一 vectorStore.accept 失败 → @Transactional 整体回滚 (P0-8 已确保)
+     * 结构表 batch INSERT 一次提交; 向量镜像 best-effort 循环派发, 失败仅 log.
+     * P0-1 双源分裂语义保留: 正常路径下结构表 + 向量表最终一致 (允许 < 1s 异步延迟).
      */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<String> adoptAll(String ragTag, List<TestCaseEntity> cases) {
         if (cases == null || cases.isEmpty()) {
             return List.of();
         }
 
-        // 1. 分配所有 stableId (一次性, 不入库)
+        // 1. 分配所有 stableId
         List<String> stableIds = new ArrayList<>(cases.size());
         List<String> rawDsls = new ArrayList<>(cases.size());
         for (TestCaseEntity tc : cases) {
@@ -136,41 +144,18 @@ public class TestCaseRepositoryImpl implements TestCaseRepositoryPort {
             }
         });
 
-        // 3. 向量表镜像 (仍按 case 循环, 任何失败 → 整体回滚)
+        // 3. 向量镜像派发 (best-effort, 失败仅 log)
         for (int i = 0; i < cases.size(); i++) {
-            mirrorToVectorStore(ragTag, stableIds.get(i), cases.get(i));
+            try {
+                vectorMirrorDispatcher.dispatch(ragTag, stableIds.get(i), cases.get(i));
+            } catch (Exception e) {
+                log.warn("Vector dispatch failed (swallow): caseId={}", stableIds.get(i), e);
+            }
         }
 
-        log.info("Batch adopted {} cases for ragTag={}", cases.size(), ragTag);
+        log.info("Batch adopted {} cases for ragTag={} (fire-and-forget vector)",
+                cases.size(), ragTag);
         return stableIds;
-    }
-
-    /**
-     * 镜像单条 case 到 spring_ai_vectors
-     * spring_ai_vectors.id 是 uuid 类型, 必须用 UUID.randomUUID() 作为 Document.id.
-     * 原 caseId (字符串如 "TC_AI_OK_ccce0f94") 放 metadata.caseId, 用于关联回 rag_test_case.
-     */
-    private void mirrorToVectorStore(String ragTag, String stableId, TestCaseEntity caseEntity) {
-        Map<String, Object> vectorMeta = new HashMap<>();
-        vectorMeta.put("knowledge", ragTag);
-        vectorMeta.put("type", "test_case");
-        vectorMeta.put("adoptionStatus", "ADOPTED");
-        vectorMeta.put("caseId", stableId);
-        vectorMeta.put("sourceDoc", caseEntity.getCaseId());
-
-        String title = caseEntity.getTitle() != null ? caseEntity.getTitle() : "";
-        String embeddingText = title + "\n"
-                + (caseEntity.getExpectedOutcome() != null ? caseEntity.getExpectedOutcome() : "");
-        Document doc = new Document(UUID.randomUUID().toString(), embeddingText, vectorMeta);
-        try {
-            vectorStore.accept(List.of(doc));
-        } catch (Exception e) {
-            log.error("Vector mirror failed for case {}, ragTag={}, rolling back",
-                    stableId, ragTag, e);
-            throw new IllegalStateException(
-                    "Failed to mirror case to vector store (transactional rollback): "
-                            + e.getMessage(), e);
-        }
     }
 
     @Override

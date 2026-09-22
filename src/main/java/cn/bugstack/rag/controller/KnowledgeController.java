@@ -6,6 +6,7 @@ import cn.bugstack.rag.model.dto.QueryTagListResponse;
 import cn.bugstack.rag.model.response.Response;
 import cn.bugstack.rag.service.IngestRetryService;
 import cn.bugstack.rag.service.KnowledgeService;
+import cn.bugstack.rag.service.VectorMirrorRetryService;   // Phase 3
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 知识库控制器
@@ -28,6 +30,9 @@ public class KnowledgeController {
 
     @Resource
     private IngestRetryService ingestRetryService;   // P0-9: DLQ 重试端点
+
+    @Resource
+    private VectorMirrorRetryService vectorMirrorRetryService;   // Phase 3: 向量镜像 DLQ 重试
 
     /**
      * 查询知识库标签列表
@@ -130,5 +135,27 @@ public class KnowledgeController {
     public Response<Integer> retryAllIngest() {
         log.info("ingest retry-all from DLQ");
         return ingestRetryService.retryAll();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3: 向量镜像 DLQ retry 端点
+    // ─────────────────────────────────────────────────────────────
+
+    @PostMapping("vector/retry")
+    public Response<String> retryVectorMirror(@RequestParam("caseId") String caseId) {
+        log.info("vector mirror retry: caseId={}", caseId);
+        return vectorMirrorRetryService.retry(caseId);
+    }
+
+    @PostMapping("vector/retry-all")
+    public Response<Integer> retryAllVectorMirror() {
+        log.info("vector mirror retry-all from DLQ");
+        return vectorMirrorRetryService.retryAll();
+    }
+
+    @GetMapping("vector/dlq-stats")
+    public Response<Map<String, Object>> getVectorMirrorDlqStats() {
+        log.info("vector mirror DLQ stats query");
+        return vectorMirrorRetryService.getStats();
     }
 }
