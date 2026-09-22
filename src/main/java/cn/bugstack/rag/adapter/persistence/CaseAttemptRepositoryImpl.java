@@ -52,7 +52,7 @@ public class CaseAttemptRepositoryImpl implements CaseAttemptRepositoryPort {
                     "INSERT INTO rag_case_attempt " +
                             "(run_id, case_id, attempt_number, outcome, duration_ms, " +
                             " error_summary, execution_data, evidence_refs) " +
-                            "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)",
+                            "VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)",
                     runId, caseId, nextNum, outcome.name(), durationMs,
                     errorSummary, executionDataJson, evidenceArraySql);
         } catch (DataIntegrityViolationException e) {
@@ -67,7 +67,7 @@ public class CaseAttemptRepositoryImpl implements CaseAttemptRepositoryPort {
                     "INSERT INTO rag_case_attempt " +
                             "(run_id, case_id, attempt_number, outcome, duration_ms, " +
                             " error_summary, execution_data, evidence_refs) " +
-                            "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)",
+                            "VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)",
                     runId, caseId, nextNum, outcome.name(), durationMs,
                     errorSummary, executionDataJson, evidenceArraySql);
         }
