@@ -36,10 +36,23 @@ public class ValidateCaseTool {
                     + "Accepts either a full CanonicalTestCase (with schemaVersion) or a single "
                     + "TestCaseEntity (auto-wrapped as v1.0.0). Returns {valid, errors[]}.")
     public Map<String, Object> validate(
-            @ToolParam(description = "CanonicalTestCase or TestCaseEntity JSON object", required = true)
-            Map<String, Object> rawCase) {
+            @ToolParam(description = "CanonicalTestCase or TestCaseEntity JSON string", required = true)
+            String rawCaseJson) {
 
-        log.info("MCP onecase_validate_case: keys={}", rawCase.keySet());
+        log.info("MCP onecase_validate_case: len={}", rawCaseJson != null ? rawCaseJson.length() : -1);
+
+        // Bug F fix: MCP/Spring AI 不稳定地把 JSON object 反序列化为 Map<String,Object> 参数,
+        //   改成接收 JSON string, 内部用 Jackson 解析. 同时兼容两种形态:
+        //   1) 完整 CanonicalTestCase {schemaVersion, summary, cases}
+        //   2) 单个 TestCaseEntity {caseId, steps, ...}  → 自动包成 v1.0.0 CanonicalTestCase
+        Map<String, Object> rawCase;
+        try {
+            rawCase = objectMapper.readValue(rawCaseJson, Map.class);
+        } catch (Exception e) {
+            return Map.of("valid", false, "errors",
+                    List.of(Map.of("path", "$", "code", "PARSE_ERROR",
+                            "message", "Cannot parse rawCaseJson: " + e.getMessage())));
+        }
 
         // 判定: 有 schemaVersion 字段 → CanonicalTestCase, 否则 → TestCaseEntity (wrap)
         CanonicalTestCase dsl;
