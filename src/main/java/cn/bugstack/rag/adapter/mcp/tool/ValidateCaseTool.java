@@ -106,8 +106,19 @@ public class ValidateCaseTool {
             List<TestCaseEntity> cases) {
         List<Map<String, Object>> results = new ArrayList<>();
         for (TestCaseEntity tc : cases) {
-            Map<String, Object> input = objectMapper.convertValue(tc, Map.class);
-            Map<String, Object> r = validate(input);
+            String inputJson;
+            try {
+                inputJson = objectMapper.writeValueAsString(tc);
+            } catch (Exception e) {
+                results.add(Map.of(
+                        "caseId", tc.getCaseId(),
+                        "valid", false,
+                        "errors", List.of(Map.of("path", "$", "code", "SERIALIZE_ERROR",
+                                "message", e.getMessage()))
+                ));
+                continue;
+            }
+            Map<String, Object> r = validate(inputJson);
             results.add(Map.of(
                     "caseId", tc.getCaseId(),
                     "valid", r.get("valid"),
