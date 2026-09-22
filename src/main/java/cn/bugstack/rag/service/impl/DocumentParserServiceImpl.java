@@ -584,7 +584,6 @@ public class DocumentParserServiceImpl implements DocumentParserService {
         }
         return ENCODING.countTokens(sb.toString());
     }
-    }
 
     /**
      * 按句子分割（中文句号、英文句号、问号、感叹号）

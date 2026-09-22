@@ -1,6 +1,5 @@
 package cn.bugstack.rag.core.port;
 
-import cn.bugstack.rag.core.domain.dsl.v1.CanonicalTestCase;
 import cn.bugstack.rag.core.domain.dsl.v1.TestCaseEntity;
 
 import java.util.List;
@@ -37,8 +36,5 @@ public interface TestCaseRepositoryPort {
      */
     List<TestCaseEntity> findAdoptedByRagTag(String ragTag);
 
-    /**
-     * 持久化整个 DSL (raw JSON) - 用于 audit 场景
-     */
-    void saveRawDsl(CanonicalTestCase dsl);
+    // Phase 2 D1: 删除 saveRawDsl 接口方法 (impl 是 no-op, 现已删除)
 }

@@ -5,8 +5,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -19,18 +18,23 @@ import java.util.Map;
  *
  * Phase 2 A7 修复: mcp_tools_count 从 MethodToolCallbackProvider.getToolCallbacks().size()
  *   动态获取, 不再写死.
+ *
+ * Phase 2 hotfix #5: 必须用 ObjectProvider + 构造注入 (不能 @Autowired @Lazy 字段注入),
+ *   因为 MethodToolCallbackProvider 是 final class, @Lazy 字段注入会让 Spring 生成 CGLIB
+ *   代理 → Cannot subclass final class 报错.
  */
 @Slf4j
 @Component
 public class McpPingTool {
 
     /**
-     * Phase 2 A7: 注入 MethodToolCallbackProvider, 动态统计 tool 数.
-     * 用 @Lazy + ObjectProvider 防循环依赖 (provider 依赖 tool, tool 依赖 provider).
+     * Phase 2 A7: 用 ObjectProvider 动态取 callbacks, 避免循环依赖 + final class 代理问题
      */
-    @Autowired
-    @Lazy
-    private MethodToolCallbackProvider toolCallbackProvider;
+    private final ObjectProvider<MethodToolCallbackProvider> toolCallbackProviderProvider;
+
+    public McpPingTool(ObjectProvider<MethodToolCallbackProvider> toolCallbackProviderProvider) {
+        this.toolCallbackProviderProvider = toolCallbackProviderProvider;
+    }
 
     @Tool(name = "onecase_ping",
           description = "OneCase MCP server health check. Returns 'pong' with current server timestamp.")
@@ -49,7 +53,8 @@ public class McpPingTool {
     @Tool(name = "onecase_server_info",
           description = "Return OneCase server version and capabilities. Use to discover server features.")
     public Map<String, Object> serverInfo() {
-        List<ToolCallback> callbacks = toolCallbackProvider.getToolCallbacks();
+        MethodToolCallbackProvider provider = toolCallbackProviderProvider.getIfAvailable();
+        List<ToolCallback> callbacks = provider != null ? provider.getToolCallbacks() : null;
         int toolCount = callbacks != null ? callbacks.size() : 0;
         log.debug("serverInfo called, toolCount={}", toolCount);
 

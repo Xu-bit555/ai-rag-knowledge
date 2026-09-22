@@ -1,5 +1,150 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://onecase.dev/schemas/canonical-test-case/v1.0.json",
-  "$ref": "v1.json"
+  "title": "CanonicalTestCaseDSL v1.0 (alias for v1)",
+  "description": "Phase 2 L6: v1.0.json alias for v1.json. content identical to v1.json (kept separate to support future v1.x patches).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "summary", "cases"],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0",
+      "description": "DSL schema version. Pin to 1.0.0 for MVP."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sourceRequirementRef": {
+      "type": "string",
+      "description": "Reference to source PRD docId (optional)."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "page", "totalCases"],
+      "properties": {
+        "app":       { "type": "string", "minLength": 1 },
+        "page":      { "type": "string", "minLength": 1 },
+        "totalCases": { "type": "integer", "minimum": 0 },
+        "testScope": { "type": "string" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/TestCase" }
+    }
+  },
+  "$defs": {
+    "TestCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "title", "automationCandidate", "steps", "expectedOutcome"],
+      "properties": {
+        "caseId":     {
+          "type": "string",
+          "pattern": "^TC_[A-Za-z0-9_]+$",
+          "description": "Phase 2 L5: 全局唯一 case 标识. 必须 TC_ 前缀 + 字母数字下划线. Java 层不再二次校验, Schema 单一权威."
+        },
+        "title":      { "type": "string", "minLength": 4, "maxLength": 200 },
+        "caseType":   { "enum": ["FUNCTIONAL", "FLOW", "EXCEPTION", "BOUNDARY", "UI", "COMPATIBILITY"] },
+        "designMethod": { "enum": ["EQUIVALENCE", "BOUNDARY", "SCENARIO", "CAUSE_EFFECT", "ERROR_GUESSING", "ORTHOGONAL"] },
+        "priority":   { "enum": ["P0", "P1", "P2", "P3"] },
+        "risk":       { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "automationCandidate": {
+          "enum": ["WEB_FUNCTIONAL", "MANUAL_VISUAL", "API", "UNSUPPORTED"],
+          "description": "Agent skips cases where this is not WEB_FUNCTIONAL."
+        },
+        "precondition": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "testData": {
+          "type": "object",
+          "description": "Phase 2 L5: 测试数据 Map. 值可为 string/number/boolean/string[]. 不要放复杂对象 (无嵌套).",
+          "additionalProperties": {
+            "anyOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/TestStep" }
+        },
+        "expectedOutcome": { "type": "string", "minLength": 1 },
+        "assertions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Assertion" }
+        }
+      }
+    },
+    "TestStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "action"],
+      "properties": {
+        "order":  { "type": "integer", "minimum": 1 },
+        "action": { "$ref": "#/$defs/StepAction" },
+        "target": { "$ref": "#/$defs/TargetLocator" },
+        "url":    { "type": "string", "description": "For NAVIGATE action only" },
+        "value":  { "type": "string" },
+        "expectedResult": { "type": "string" },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000,
+          "default": 5000
+        }
+      }
+    },
+    "StepAction": {
+      "type": "string",
+      "enum": ["NAVIGATE", "CLICK", "INPUT", "SELECT", "WAIT", "ASSERT", "SCREENSHOT"]
+    },
+    "TargetLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": { "$ref": "#/$defs/LocatorStrategyKind" },
+        "role":     { "type": "string" },
+        "name":     { "type": "string" },
+        "text":     { "type": "string" },
+        "label":    { "type": "string" },
+        "testId":   { "type": "string" },
+        "selector": { "type": "string" },
+        "xpath":    { "type": "string" },
+        "exact":    { "type": "boolean", "default": false }
+      }
+    },
+    "LocatorStrategyKind": {
+      "type": "string",
+      "enum": ["ROLE", "TEXT", "LABEL", "TESTID", "CSS", "XPATH"]
+    },
+    "Assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind":     { "$ref": "#/$defs/AssertionKind" },
+        "target":   { "$ref": "#/$defs/TargetLocator" },
+        "expected": { "type": "string" },
+        "negate":   { "type": "boolean", "default": false }
+      }
+    },
+    "AssertionKind": {
+      "type": "string",
+      "enum": [
+        "URL_EQUALS", "URL_CONTAINS",
+        "ELEMENT_VISIBLE", "ELEMENT_NOT_PRESENT",
+        "TEXT_EQUALS", "TEXT_CONTAINS", "VALUE_EQUALS"
+      ]
+    }
+  }
 }

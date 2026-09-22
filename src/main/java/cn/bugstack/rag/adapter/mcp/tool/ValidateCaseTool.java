@@ -1,23 +1,27 @@
 package cn.bugstack.rag.adapter.mcp.tool;
 
+import cn.bugstack.rag.core.domain.dsl.v1.CanonicalTestCase;
 import cn.bugstack.rag.core.domain.dsl.v1.DslValidator;
 import cn.bugstack.rag.core.domain.dsl.v1.DslValidator.ValidationResult;
+import cn.bugstack.rag.core.domain.dsl.v1.RequirementSummary;
 import cn.bugstack.rag.core.domain.dsl.v1.TestCaseEntity;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
  * onecase_validate_case MCP Tool
  *
- * Phase 2 第二个核心 Tool: 校验 DSL 合法性
- *
- * 调用时机: generate_cases 之后、adopt_cases 之前
+ * Phase 2 hotfix: 改接收 CanonicalTestCase (含 schemaVersion) 而非裸 TestCaseEntity,
+ *   让 L6 dispatcher 能根据用户传的 schemaVersion 选 schema. 同时支持旧 API:
+ *   单 TestCaseEntity 也能调 (会自动包成 CanonicalTestCase v1.0.0).
  */
 @Slf4j
 @Component
@@ -25,32 +29,53 @@ import java.util.Map;
 public class ValidateCaseTool {
 
     private final DslValidator dslValidator;
+    private final ObjectMapper objectMapper;
 
     @Tool(name = "onecase_validate_case",
-            description = "Validate a TestCaseEntity against Canonical DSL v1.0.0 schema and business "
-                    + "semantics. Returns {valid, errors[]}. Use this before calling onecase_adopt_cases "
-                    + "to fail fast on invalid DSL. The case object must include automationCandidate field "
-                    + "(Agent skips cases where this is not WEB_FUNCTIONAL).")
+            description = "Validate DSL against Canonical schema and business semantics. "
+                    + "Accepts either a full CanonicalTestCase (with schemaVersion) or a single "
+                    + "TestCaseEntity (auto-wrapped as v1.0.0). Returns {valid, errors[]}.")
     public Map<String, Object> validate(
-            @ToolParam(description = "TestCaseEntity JSON object", required = true) TestCaseEntity caseEntity) {
+            @ToolParam(description = "CanonicalTestCase or TestCaseEntity JSON object", required = true)
+            Map<String, Object> rawCase) {
 
-        log.info("MCP onecase_validate_case: caseId={}", caseEntity.getCaseId());
+        log.info("MCP onecase_validate_case: keys={}", rawCase.keySet());
 
-        // 包装成 Canonical DSL 单 case 形式
-        cn.bugstack.rag.core.domain.dsl.v1.CanonicalTestCase wrapper =
-                cn.bugstack.rag.core.domain.dsl.v1.CanonicalTestCase.builder()
-                        .schemaVersion("1.0.0")
-                        .summary(cn.bugstack.rag.core.domain.dsl.v1.RequirementSummary.builder()
-                                .app("validation").page("validation").totalCases(1).build())
-                        .cases(List.of(caseEntity))
-                        .build();
+        // 判定: 有 schemaVersion 字段 → CanonicalTestCase, 否则 → TestCaseEntity (wrap)
+        CanonicalTestCase dsl;
+        if (rawCase.containsKey("schemaVersion") || rawCase.containsKey("summary") || rawCase.containsKey("cases")) {
+            try {
+                dsl = objectMapper.convertValue(rawCase, CanonicalTestCase.class);
+            } catch (Exception e) {
+                return Map.of("valid", false, "errors",
+                        List.of(Map.of("path", "$", "code", "PARSE_ERROR",
+                                "message", "Cannot parse as CanonicalTestCase: " + e.getMessage())));
+            }
+        } else {
+            // 旧 API: 接收裸 TestCaseEntity, 包成 CanonicalTestCase v1.0.0
+            TestCaseEntity tc;
+            try {
+                tc = objectMapper.convertValue(rawCase, TestCaseEntity.class);
+            } catch (Exception e) {
+                return Map.of("valid", false, "errors",
+                        List.of(Map.of("path", "$", "code", "PARSE_ERROR",
+                                "message", "Cannot parse as TestCaseEntity: " + e.getMessage())));
+            }
+            dsl = CanonicalTestCase.builder()
+                    .schemaVersion("1.0.0")
+                    .summary(RequirementSummary.builder()
+                            .app("validation").page("validation").totalCases(1).build())
+                    .cases(List.of(tc))
+                    .build();
+        }
 
         String json;
         try {
-            json = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writeValueAsString(wrapper);
+            json = objectMapper.writeValueAsString(dsl);
         } catch (Exception e) {
-            return Map.of("valid", false, "errors", List.of("[Serialize] " + e.getMessage()));
+            return Map.of("valid", false, "errors",
+                    List.of(Map.of("path", "$", "code", "SERIALIZE_ERROR",
+                            "message", "Cannot serialize: " + e.getMessage())));
         }
 
         ValidationResult vr = dslValidator.validate(json);
@@ -63,11 +88,13 @@ public class ValidateCaseTool {
     /**
      * 批量校验多个 Cases
      */
-    public Map<String, Object> validateBatch(@ToolParam(description = "Array of TestCaseEntity", required = true)
-                                              List<TestCaseEntity> cases) {
-        java.util.List<Map<String, Object>> results = new java.util.ArrayList<>();
+    public Map<String, Object> validateBatch(
+            @ToolParam(description = "Array of TestCaseEntity", required = true)
+            List<TestCaseEntity> cases) {
+        List<Map<String, Object>> results = new ArrayList<>();
         for (TestCaseEntity tc : cases) {
-            Map<String, Object> r = validate(tc);
+            Map<String, Object> input = objectMapper.convertValue(tc, Map.class);
+            Map<String, Object> r = validate(input);
             results.add(Map.of(
                     "caseId", tc.getCaseId(),
                     "valid", r.get("valid"),

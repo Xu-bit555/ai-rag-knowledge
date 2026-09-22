@@ -92,7 +92,9 @@ public class TargetResolver {
         String role = target.getRole();
         String name = target.getName();
         if (role == null) return null;
-        Boolean exact = target.getExact() != null ? target.getExact() : false;
+        // Phase 2 L1: TargetLocator.exact 改为 boolean 原语 (Boolean → boolean),
+        //   Lombok @Data 生成 isExact() 而非 getExact()
+        boolean exact = target.isExact();
         for (Map<String, Object> n : nodes) {
             if (!role.equals(n.get("role"))) continue;
             if (name == null) return (String) n.get("ref");
@@ -111,7 +113,9 @@ public class TargetResolver {
     private String matchText(List<Map<String, Object>> nodes, TargetLocator target) {
         String text = target.getText();
         if (text == null) return null;
-        Boolean exact = target.getExact() != null ? target.getExact() : false;
+        // Phase 2 L1: TargetLocator.exact 改为 boolean 原语 (Boolean → boolean),
+        //   Lombok @Data 生成 isExact() 而非 getExact()
+        boolean exact = target.isExact();
         for (Map<String, Object> n : nodes) {
             String nodeName = (String) n.get("name");
             if (nodeName == null) continue;

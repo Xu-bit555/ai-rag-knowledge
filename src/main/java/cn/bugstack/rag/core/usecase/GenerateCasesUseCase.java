@@ -144,21 +144,6 @@ public class GenerateCasesUseCase {
         sb.append(requirement != null ? requirement : "");
         return sb.toString();
     }
-            throw new IllegalStateException(
-                    "LLM output is not valid Canonical DSL JSON. First 500 chars: "
-                            + cleanJson.substring(0, Math.min(500, cleanJson.length())), e);
-        }
-
-        // 4. 校验
-        ValidationResult vr = dslValidator.validate(cleanJson);
-        if (!vr.isValid()) {
-            throw new IllegalStateException(
-                    "Generated DSL failed validation: " + String.join("; ", vr.getErrorMessages()));
-        }
-
-        // Phase 2 D1: 删除 no-op audit saveRawDsl 调用 (testCaseRepository 不再暴露该方法)
-        return dsl;
-    }
 
     /**
      * 构建 Canonical DSL v1.0.0 专用 prompt
