@@ -175,23 +175,31 @@ public class GenerateCasesUseCase {
         sb.append(schemaJson);
         sb.append("\n```\n\n");
 
-        sb.append("# 输出格式 (示例)\n");
+        sb.append("# 输出格式 (完整可复制示例,字段名必须与下面一致,严禁自创字段)\n");
         sb.append("```json\n");
         sb.append("{\n");
         sb.append("  \"schemaVersion\": \"1.0.0\",\n");
-        sb.append("  \"summary\": { \"app\": \"...\", \"page\": \"...\", \"totalCases\": <int> },\n");
+        sb.append("  \"summary\": { \"app\": \"terabox\", \"page\": \"login\", \"totalCases\": 1 },\n");
         sb.append("  \"cases\": [\n");
         sb.append("    {\n");
-        sb.append("      \"caseId\": \"TC_xxx\",                    // 格式: TC_[A-Za-z0-9_]+\n");
-        sb.append("      \"title\": \"...\",\n");
-        sb.append("      \"automationCandidate\": \"WEB_FUNCTIONAL\", // 仅接受这个枚举值\n");
-        sb.append("      \"priority\": \"P0|P1|P2|P3\",\n");
+        sb.append("      \"caseId\": \"TC_LOGIN_VALID_OK\",\n");
+        sb.append("      \"title\": \"Login with valid credentials redirects to home\",\n");
+        sb.append("      \"caseType\": \"FUNCTIONAL\",\n");
+        sb.append("      \"priority\": \"P1\",\n");
+        sb.append("      \"risk\": \"LOW\",\n");
+        sb.append("      \"automationCandidate\": \"WEB_FUNCTIONAL\",\n");
+        sb.append("      \"precondition\": [\"用户已注册: test_user / Test123!\",\"浏览器已打开且网络可用\"],\n");
         sb.append("      \"steps\": [\n");
-        sb.append("        { \"order\": <int>, \"action\": \"NAVIGATE|CLICK|INPUT|...\", \"url\"|\"target\": ... }\n");
+        sb.append("        { \"order\": 1, \"action\": \"NAVIGATE\", \"url\": \"https://terabox.example/login\" },\n");
+        sb.append("        { \"order\": 2, \"action\": \"INPUT\", \"target\": {\"strategy\": \"CSS\", \"selector\": \"#username\"}, \"value\": \"test_user\" },\n");
+        sb.append("        { \"order\": 3, \"action\": \"INPUT\", \"target\": {\"strategy\": \"CSS\", \"selector\": \"#password\"}, \"value\": \"Test123!\" },\n");
+        sb.append("        { \"order\": 4, \"action\": \"CLICK\", \"target\": {\"strategy\": \"CSS\", \"selector\": \"#login-btn\"} },\n");
+        sb.append("        { \"order\": 5, \"action\": \"WAIT\",  \"timeoutMs\": 3000 }\n");
         sb.append("      ],\n");
-        sb.append("      \"expectedOutcome\": \"...\",\n");
+        sb.append("      \"expectedOutcome\": \"URL 变为 https://terabox.example/home, 顶部导航出现 test_user 头像\",\n");
         sb.append("      \"assertions\": [\n");
-        sb.append("        { \"kind\": \"URL_CONTAINS|ELEMENT_VISIBLE|...\", \"expected\"|\"target\": ... }\n");
+        sb.append("        { \"kind\": \"URL_CONTAINS\", \"expected\": \"/home\" },\n");
+        sb.append("        { \"kind\": \"ELEMENT_VISIBLE\", \"target\": {\"strategy\": \"CSS\", \"selector\": \".user-avatar\"} }\n");
         sb.append("      ]\n");
         sb.append("    }\n");
         sb.append("  ]\n");
@@ -228,6 +236,13 @@ public class GenerateCasesUseCase {
         sb.append("4. automationCandidate 默认 WEB_FUNCTIONAL(MVP 仅支持 Web)\n");
         sb.append("5. 不要编造 UI 元素(按钮、字段);只基于需求中明确提到的元素\n");
         sb.append("6. 严禁在 JSON 外加任何 markdown 或解释\n\n");
+
+        sb.append("# 严禁使用的字段 (LLM 容易幻觉自创的字段,这些字段在 Schema 中不存在)\n");
+        sb.append("- 顶层禁止: meta / metadata / context / createdBy\n");
+        sb.append("- cases[i] 禁止: id / name / description / tags / preconditions / postconditions / owner\n");
+        sb.append("- steps[i] 禁止: id / input / operator / description / comment\n");
+        sb.append("- target 禁止: type / value (value 只属于 steps,不属于 target);target 只用 strategy + role/text/label/testId/selector/xpath\n");
+        sb.append("- 如果你不知道某个字段放哪,省略它,不要硬塞\n\n");
 
         sb.append("# 需求内容\n");
         sb.append("```\n");
