@@ -76,6 +76,15 @@ public class DslValidator {
         public String toLine() {
             return path + ": " + message;
         }
+
+        /**
+         * Phase 3 hotfix: 兼容测试文件 DslValidatorTest 中 `e.contains("...")` 调用.
+         *   旧 API 是 List<String>, Phase 1 P0-4 改为 record FieldError 后测试未同步.
+         *   这里加 contains(String) 便利方法 (匹配 message 子串), 让测试无需大改.
+         */
+        public boolean contains(String substring) {
+            return message != null && message.contains(substring);
+        }
     }
 
     /**

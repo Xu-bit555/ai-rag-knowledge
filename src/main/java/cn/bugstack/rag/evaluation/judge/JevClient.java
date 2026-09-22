@@ -43,14 +43,17 @@ import java.util.Map;
  */
 public final class JevClient {
 
-    public static final String DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh";
-    public static final String DEFAULT_MODEL    = "typesafe-ai/jev";
+    public static final String DEFAULT_BASE_URL = "https://api.typesafe.ai";
+    public static final String DEFAULT_MODEL    = "jev-latest";
 
     /**
-     * 端点路径（per Vercel AI Gateway docs TypeSafe API）：
-     *   POST {baseUrl}/typesafe/v1/systemone
+     * 端点路径（per TypeSafe 直接 API）：
+     *   POST {baseUrl}/v1/systemone
+     *
+     * 注意：direct TypeSafe（api.typesafe.ai）和 Vercel AI Gateway 的 TypeSafe 兼容层
+     * （ai-gateway.vercel.sh/typesafe/v1/systemone）路径不同。
      */
-    public static final String SYSTEMONE_PATH  = "/typesafe/v1/systemone";
+    public static final String SYSTEMONE_PATH  = "/v1/systemone";
 
     private final String baseUrl;
     private final String model;
@@ -76,8 +79,9 @@ public final class JevClient {
     }
 
     private static String readApiKeyFromEnv() {
-        String k = System.getenv("AI_GATEWAY_API_KEY");
-        if (k == null) k = System.getenv().get("AI_GATEWAY_API_KEY");
+        // 优先级：TYPESAFE_API_KEY > AI_GATEWAY_API_KEY（兼容旧版）
+        String k = System.getenv("TYPESAFE_API_KEY");
+        if (k == null) k = System.getenv("AI_GATEWAY_API_KEY");
         return k;
     }
 

@@ -284,7 +284,9 @@ class DslValidatorTest {
         String dsl = minimalValidDsl().replace("TC_LOGIN_001", "LOGIN_001");
         ValidationResult r = validator.validate(dsl);
         assertFalse(r.isValid());
-        assertTrue(r.getErrors().stream().anyMatch(e -> e.contains("caseId must match")));
+        // Phase 2 L5: caseId 格式校验由 JSON Schema pattern 单一权威, 错误码 SCHEMA_pattern
+        assertTrue(r.getErrors().stream().anyMatch(e -> e.code().contains("pattern")),
+                () -> "Errors: " + r.getErrors());
     }
 
     private String minimalValidDsl() {
