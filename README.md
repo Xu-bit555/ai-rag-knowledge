@@ -274,6 +274,46 @@ docker compose up -d
 # 启动: postgres + redis + onecase + demo-web + playwright-mcp
 ```
 
+### ⚠️ 数据持久化 + 密码漂移排查
+
+Phase 3 期间云服务器多次出现 `postgres` 密码被 reset 的现象（`password authentication failed for user "postgres"`）。**根因 + 修复**：
+
+**根因**：
+- `postgres` 服务用 `pgdata:/var/lib/postgresql/data` named volume 持久化
+- **但如果运维跑过 `docker compose down -v`（带 `-v`）**，named volume 被删 → 容器重启时 PG 重新 init → `POSTGRES_PASSWORD=postgres` 被重新写入 SCRAM hash
+- 容器健康检查 `pg_isready -U postgres -d onecase` 也曾配错成 `-d vector_store`（Phase 3 已修）
+
+**正确运维命令**：
+
+```bash
+# ✅ 只停不停数据
+docker compose down
+
+# ❌ 不要用 -v (会删 named volume, 数据全丢)
+docker compose down -v
+
+# 如果必须重建容器 (保留数据):
+docker compose stop postgres
+docker compose up -d postgres
+# 然后再启其他
+docker compose up -d onecase demo-web
+
+# 如果必须删库重建 (接受数据丢失):
+docker compose down -v
+docker volume rm <project>_pgdata   # 显式删, 不要靠 -v
+docker compose up -d
+
+# 改密码正确做法 (改 env + 重启, 不要 ALTER USER):
+# 1. 改 docker-compose.yml 的 POSTGRES_PASSWORD
+# 2. docker compose down -v   # ⚠️ 这会丢数据!
+# 3. docker compose up -d
+# 替代: 直接在运行的 PG 里改 (持久):
+#    docker exec -it onecase-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD 'newpassword';"
+#    然后同步改 application.yml / docker-compose.yml 的 DB_PASSWORD
+```
+
+**预防措施**：phase 3 已修 healthcheck（`pg_isready -U postgres -d onecase`）。
+
 ## 13. MCP Configuration for Multic
 
 详见 `docs/agent-integration/multic.md`。注意:
